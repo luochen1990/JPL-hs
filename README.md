@@ -1,1 +1,3 @@
-# jpl-hs
+JSON Processing Language -- Haskell
+===================================
+

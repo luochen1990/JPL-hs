@@ -1,2 +1,6 @@
 .stack-work/
+*.cabal
+*.bak
+*.log
+*.lock
 *~

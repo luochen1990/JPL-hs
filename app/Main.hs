@@ -1,6 +1,6 @@
 module Main where
 
-import Lib
+import JPL
 
 main :: IO ()
-main = someFunc
+main = print "type checked"

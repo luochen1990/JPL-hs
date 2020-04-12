@@ -1,7 +1,7 @@
 name:                jpl-hs
 version:             0.1.0.0
 github:              "luochen1990/jpl-hs"
-license:             BSD3
+license:             Apache-2.0
 author:              "LuoChen"
 maintainer:          "luochen1990@gmail.com"
 copyright:           "2020 LuoChen"
@@ -21,6 +21,19 @@ description:         Please see the README on GitHub at <https://github.com/luoc
 
 dependencies:
 - base >= 4.7 && < 5
+- containers
+- transformers
+- mtl
+- hspec
+- QuickCheck
+- bytes
+- cereal
+- bytestring
+- megaparsec
+- parser-combinators
+- raw-strings-qq
+- pretty-simple
+- text
 
 library:
   source-dirs: src
