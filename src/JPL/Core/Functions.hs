@@ -12,7 +12,7 @@ import Data.Set (Set)
 import Control.Monad
 import Control.Applicative
 import qualified Control.Monad.State.Class as State
-import Control.Monad.State (State, StateT, runStateT)
+import Control.Monad.State (State, StateT(..), runStateT)
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Data.Semigroup
@@ -32,7 +32,16 @@ import JPL.Core.Definitions
 -- ** matchPattern
 
 matchPattern :: Pattern -> Expr -> Maybe [(Ident, Expr)]
-matchPattern pat expr = undefined
+matchPattern pat expr = match pat expr [] where
+    match :: Pattern -> Expr -> [(Ident, Expr)] -> Maybe [(Ident, Expr)]
+    match pat expr bindings = case (pat, expr) of
+        (ConstNullPat, Null) -> Just bindings
+        (ConstNumberPat x, Number x') -> if x == x' then Just bindings else Nothing
+        (ConstTextPat s, Text s') -> if s == s' then Just bindings else Nothing
+        (ConstBooleanPat b, Boolean b') -> if b == b' then Just bindings else Nothing
+        (DictPat mp, Dict mp') -> concat <$> sequence [if isJust mv then match pat (fromJust mv) [] else Nothing | (k, pat) <- M.toList mp, let mv = M.lookup k mp']
+        (ListPat xs, List xs') -> if length xs == length xs' then concat <$> sequence [match pat v [] | (pat, v) <- zip xs xs'] else Nothing
+        (VarPat id, _) -> Just ((id, expr) : bindings)
 
 -- ** FuelT
 
@@ -79,7 +88,7 @@ type Env = Map Ident Expr
 type EvalProc a = FuelT (StateT () EvalResult) a
 
 yield :: EvalResult a -> EvalProc a
-yield = undefined
+yield r = FuelT (\n -> MaybeT (StateT $ \ ~() -> fmap (\a -> (Just (a, n), ())) r))
 
 runEvalProc :: EvalProc a -> Int -> EvalResult a
 runEvalProc proc fuel = case runStateT (runMaybeT (runFuelT proc fuel)) () of
@@ -124,11 +133,14 @@ evalProc env expr = case expr of
             Boolean False -> yield $ LogicalError "assertion failed"
             _ -> yield $ LogicalError "assert cond must be Boolean"
 
--- ** evalN & eval
+-- ** eval
 
-evalN :: Int -> Env -> Expr -> EvalResult Expr
-evalN fuel env expr = runEvalProc (evalProc env expr) fuel
+eval :: Int -> Env -> Expr -> EvalResult Expr
+eval fuel env expr = runEvalProc (evalProc env expr) fuel
 
-eval :: Env -> Expr -> EvalResult Expr
-eval = evalN 100000
+eval' :: Env -> Expr -> EvalResult Expr
+eval' = eval 100000
+
+eval'' :: Expr -> EvalResult Expr
+eval'' = eval' M.empty
 
