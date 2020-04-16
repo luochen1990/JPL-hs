@@ -39,8 +39,8 @@ matchPattern pat expr = match pat expr [] where
         (ConstNumberPat x, Number x') -> if x == x' then Just bindings else Nothing
         (ConstTextPat s, Text s') -> if s == s' then Just bindings else Nothing
         (ConstBooleanPat b, Boolean b') -> if b == b' then Just bindings else Nothing
-        (DictPat mp, Dict mp') -> concat <$> sequence [if isJust mv then match pat (fromJust mv) [] else Nothing | (k, pat) <- M.toList mp, let mv = M.lookup k mp']
         (ListPat xs, List xs') -> if length xs == length xs' then concat <$> sequence [match pat v [] | (pat, v) <- zip xs xs'] else Nothing
+        (DictPat mp, Dict mp') -> concat <$> sequence [if isJust mv then match pat (fromJust mv) [] else Nothing | (k, pat) <- mp, let mv = lookup k mp']
         (VarPat id, _) -> Just ((id, expr) : bindings)
 
 -- ** FuelT
@@ -101,8 +101,8 @@ evalProc env expr = case expr of
     Number x -> yield (Success (Number x))
     Text s -> yield (Success (Text s))
     Boolean b -> yield (Success (Boolean b))
-    Dict mp -> (Dict . M.fromList) <$> sequence [(k,) <$> (evalProc env e) | (k, e) <- M.toList mp]
     List es -> List <$> sequence [(evalProc env e) | e <- es]
+    Dict mp -> Dict <$> sequence [(k,) <$> (evalProc env e) | (k, e) <- mp]
     Var id -> case (M.lookup id env) of
         Just e' -> evalProc env e'
         Nothing -> yield (LogicalError "variable not found")

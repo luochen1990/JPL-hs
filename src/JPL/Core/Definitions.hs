@@ -52,8 +52,8 @@ data Expr =
     | Number Double
     | Text String
     | Boolean Bool
-    | Dict (Map String Expr)
     | List [Expr]
+    | Dict [(String, Expr)]
     -- | Lookup Expr Ident
     -- | Index Expr Expr
     | Var Ident
@@ -71,8 +71,8 @@ data Pattern =
     | ConstNumberPat Double
     | ConstTextPat String
     | ConstBooleanPat Bool
-    | DictPat (Map String Pattern)
     | ListPat [Pattern]
+    | DictPat [(String, Pattern)]
     | VarPat Ident
     deriving (Eq)
 
@@ -84,8 +84,8 @@ instance ShowLiteral Expr where
         Number x -> (0, show x) --TODO: specify format
         Text s -> (0, show s) --TODO: escape
         Boolean b -> (0, if b then "true" else "false")
-        Dict mp -> (0, "{" ++ intercalate ", " [showKey k ++ ": " ++ showPart 1 v | (k, v) <- M.toList mp] ++ "}")
         List xs -> (0, "[" ++ intercalate ", " [showPart 1 x | x <- xs] ++ "]")
+        Dict mp -> (0, "{" ++ intercalate ", " [showKey k ++ ": " ++ showPart 1 v | (k, v) <- mp] ++ "}")
         Var id -> (0, id)
         App ef ex -> (1, showPart 1 ef ++ " " ++ showPart 0 ex)
         Let k v e -> (2, k ++ " := " ++ showPart 1 v ++ "; " ++ showPart 2 e)
@@ -102,8 +102,8 @@ instance ShowLiteral Pattern where
         ConstNumberPat x -> (0, show x) --TODO
         ConstTextPat s -> (0, show s) --TODO
         ConstBooleanPat b -> (0, if b then "true" else "false")
-        DictPat mp -> (0, "{" ++ intercalate "," [showKey k ++ ":" ++ showPart 1 v | (k, v) <- M.toList mp] ++ "}")
         ListPat xs -> (0, "[" ++ intercalate "," [showPart 1 x | x <- xs] ++ "]")
+        DictPat mp -> (0, "{" ++ intercalate "," [showKey k ++ ":" ++ showPart 1 v | (k, v) <- mp] ++ "}")
         VarPat id -> (0, id)
         where
             showKey k = if True then k else show k --TODO: escape
