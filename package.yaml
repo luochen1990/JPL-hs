@@ -32,6 +32,7 @@ dependencies:
 - megaparsec
 - parser-combinators
 - raw-strings-qq
+- recursion-schemes
 - pretty-simple
 - text
 

@@ -4,6 +4,10 @@
 {-# language RankNTypes #-}
 {-# language UndecidableInstances #-}
 
+{-# language TemplateHaskell #-}
+{-# language TypeFamilies #-}
+{-# language StandaloneDeriving, DeriveTraversable #-}
+
 -- | Providing core definitions about JsonSpec
 
 module JPL.Core.Definitions where
@@ -25,6 +29,7 @@ import Data.Fixed (mod')
 import Data.Text.Lazy (unpack)
 import Data.Char (isAlphaNum)
 import Text.Pretty.Simple
+import Data.Functor.Foldable.TH ( makeBaseFunctor )
 
 impossible :: a
 impossible = undefined
@@ -68,6 +73,17 @@ data Expr =
 
 type Pattern = Expr -- ^ Pattern is an Expr with only data constructors and vars
 
+-- | check if an Expr is a Weak Head Normal Form
+isWHNF :: Expr -> Bool
+isWHNF expr = case expr of
+    Null -> True
+    Number _ -> True
+    Text _ -> True
+    Boolean _ -> True
+    List _ -> True
+    Dict _ -> True
+    _ -> False
+
 -- | check if an Expr is a valid Pattern
 isPattern :: Expr -> Bool
 isPattern expr = case expr of
@@ -102,6 +118,13 @@ instance ShowLiteral Expr where
 
 instance Show Expr where
     show expr = "Expr `" ++ (showLit maxBound expr) ++ "`"
+
+-------------------------------------------------------------------------------------------
+-- * ExprF
+-------------------------------------------------------------------------------------------
+
+-- | data ExprF e
+makeBaseFunctor ''Expr
 
 -------------------------------------------------------------------------------------------
 -- * EvalResult

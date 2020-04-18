@@ -9,6 +9,7 @@ import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Data.Set as S
 import Data.Set (Set)
+import Control.Arrow
 import Control.Monad
 import Control.Applicative
 import qualified Control.Monad.State.Class as State
@@ -82,51 +83,80 @@ instance MonadTrans FuelT where
         MaybeT $ return (Just (a, s-1))
     {-# INLINE lift #-}
 
--- ** EvalProc
+-- ** EvalM
 
-type Env = Map Ident Expr
+-- | EvalM is the monad for eval procedure
+type EvalM a = FuelT (StateT () EvalResult) a
 
-type EvalProc a = FuelT (StateT () EvalResult) a
+data Expr' = MkExpr' (ExprF Expr') | NativeFn (Expr -> EvalM Expr)
 
-yield :: EvalResult a -> EvalProc a
+type Env = Map Ident Expr'
+
+yield :: EvalResult a -> EvalM a
 yield r = FuelT (\n -> MaybeT (StateT $ \ ~() -> fmap (\a -> (Just (a, n), ())) r))
 
-runEvalProc :: EvalProc a -> Int -> EvalResult a
-runEvalProc proc fuel = case runStateT (runMaybeT (runFuelT proc fuel)) () of
+runEvalM :: EvalM a -> Int -> EvalResult a
+runEvalM proc fuel = case runStateT (runMaybeT (runFuelT proc fuel)) () of
     (Success (mr, s)) -> case mr of Nothing -> OutOfFuel; Just (r, fuelLeft) -> Success r
     err -> fmap impossible err
 
-evalProc :: Env -> Expr -> EvalProc Expr
-evalProc env expr = case expr of
-    Null -> yield (Success Null)
-    Number x -> yield (Success (Number x))
-    Text s -> yield (Success (Text s))
-    Boolean b -> yield (Success (Boolean b))
-    List es -> List <$> sequence [(evalProc env e) | e <- es]
-    Dict mp -> Dict <$> sequence [(k,) <$> (evalProc env e) | (k, e) <- mp]
+-- ** evalM
+
+evalM :: Env -> Expr -> EvalM Expr
+evalM env expr = do
+    r <- evalM' env expr
+    case r of
+        MkExpr' e -> yield (Success (toExpr r))
+        NativeFn fn -> yield (LogicalError "got native fn as final result")
+
+toExpr :: Expr' -> Expr
+toExpr = undefined
+
+toExpr' :: Expr -> Expr'
+toExpr' = undefined
+
+evalM' :: Env -> Expr -> EvalM Expr'
+evalM' env expr = case expr of
+    Null -> yield (Success (MkExpr' NullF))
+    Number x -> yield (Success (MkExpr' (NumberF x)))
+    Text s -> yield (Success (MkExpr' (TextF s)))
+    Boolean b -> yield (Success (MkExpr' (BooleanF b)))
+    List es -> (MkExpr' . ListF) <$> sequence [(evalM' env e) | e <- es]
+    Dict mp -> (MkExpr' . DictF) <$> sequence [(k,) <$> (evalM' env e) | (k, e) <- mp]
     Var id -> case (M.lookup id env) of
-        Just e' -> evalProc env e'
+        Just e' -> yield (Success e')
         Nothing -> yield (LogicalError "variable not found")
-    App ef ea -> App <$> evalProc env ef <*> evalProc env ea
-    Lam pat e -> yield (Success (Lam pat e))
-    Let k v e -> evalProc (M.insert k v env) e
+    App ef ex -> do
+        f <- evalM' env ef
+        case f of
+            (MkExpr' (LamF pat e)) -> do
+                x <- evalM env ex
+                case matchPattern (toExpr pat) x of
+                    Nothing -> yield (LogicalError "pattern not match")
+                    Just extraEnv -> evalM' (M.union env (M.fromList (map (second toExpr') extraEnv))) (toExpr e)
+            --(MkExpr' (AltF eg eh)) -> 
+            --(NativeFn fn) -> do
+            --    x <- evalM' env ex
+            --    case x of
+    Lam pat e -> yield (Success (MkExpr' (LamF (toExpr' pat) (toExpr' e))))
+    Let k v e -> evalM' (M.insert k (toExpr' v) env) e
     Assume ep e -> do
-        p <- evalProc env ep
+        p <- evalM' env ep
         case p of
-            Boolean True -> evalProc env e
-            Boolean False -> yield $ ImproperCall
+            (MkExpr' (BooleanF True)) -> evalM' env e
+            (MkExpr' (BooleanF False)) -> yield $ ImproperCall
             _ -> yield $ LogicalError "assume cond must be Boolean"
     Assert ep e -> do
-        p <- evalProc env ep
+        p <- evalM' env ep
         case p of
-            Boolean True -> evalProc env e
-            Boolean False -> yield $ LogicalError "assertion failed"
+            (MkExpr' (BooleanF True)) -> evalM' env e
+            (MkExpr' (BooleanF False)) -> yield $ LogicalError "assertion failed"
             _ -> yield $ LogicalError "assert cond must be Boolean"
 
 -- ** eval
 
 eval :: Int -> Env -> Expr -> EvalResult Expr
-eval fuel env expr = runEvalProc (evalProc env expr) fuel
+eval fuel env expr = runEvalM (evalM env expr) fuel
 
 eval' :: Env -> Expr -> EvalResult Expr
 eval' = eval 100000
