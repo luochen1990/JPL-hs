@@ -35,13 +35,14 @@ matchPattern :: Pattern -> Expr -> Maybe [(Ident, Expr)]
 matchPattern pat expr = match pat expr [] where
     match :: Pattern -> Expr -> [(Ident, Expr)] -> Maybe [(Ident, Expr)]
     match pat expr bindings = case (pat, expr) of
-        (ConstNullPat, Null) -> Just bindings
-        (ConstNumberPat x, Number x') -> if x == x' then Just bindings else Nothing
-        (ConstTextPat s, Text s') -> if s == s' then Just bindings else Nothing
-        (ConstBooleanPat b, Boolean b') -> if b == b' then Just bindings else Nothing
-        (ListPat xs, List xs') -> if length xs == length xs' then concat <$> sequence [match pat v [] | (pat, v) <- zip xs xs'] else Nothing
-        (DictPat mp, Dict mp') -> concat <$> sequence [if isJust mv then match pat (fromJust mv) [] else Nothing | (k, pat) <- mp, let mv = lookup k mp']
-        (VarPat id, _) -> Just ((id, expr) : bindings)
+        (Null, Null) -> Just bindings
+        (Number x, Number x') -> if x == x' then Just bindings else Nothing
+        (Text s, Text s') -> if s == s' then Just bindings else Nothing
+        (Boolean b, Boolean b') -> if b == b' then Just bindings else Nothing
+        (List xs, List xs') -> if length xs == length xs' then concat <$> sequence [match pat v [] | (pat, v) <- zip xs xs'] else Nothing
+        (Dict mp, Dict mp') -> concat <$> sequence [if isJust mv then match pat (fromJust mv) [] else Nothing | (k, pat) <- mp, let mv = lookup k mp']
+        (Var id, _) -> if id == "_" then Just bindings else Just ((id, expr) : bindings) --NOTE: _ is an special identifier
+        _ -> complain "given `pat` is not a valid Pattern"
 
 -- ** FuelT
 
@@ -109,12 +110,6 @@ evalProc env expr = case expr of
     App ef ea -> App <$> evalProc env ef <*> evalProc env ea
     Lam id e -> yield (Success (Lam id e))
     Let k v e -> evalProc (M.insert k v env) e
-    If ep ea eb -> do
-        p <- evalProc env ep
-        case p of
-            Boolean True -> evalProc env ea
-            Boolean False -> evalProc env eb
-            _ -> yield $ LogicalError "if cond must be Boolean"
     Case e cs -> do
         v <- evalProc env e
         case listToMaybe [(exp, fromJust mat) | (pat, exp) <- cs, let mat = matchPattern pat v, isJust mat] of

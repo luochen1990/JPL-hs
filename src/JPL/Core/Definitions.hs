@@ -29,6 +29,9 @@ import Text.Pretty.Simple
 impossible :: a
 impossible = undefined
 
+complain :: String -> a --TODO: add stack trace
+complain msg = error ("complain: " ++ msg)
+
 --------------------------------------------------------------------------------
 -- * ShowLiteral
 --------------------------------------------------------------------------------
@@ -45,7 +48,7 @@ class ShowLiteral a where
 -- * Expr
 --------------------------------------------------------------------------------
 
-type Ident = String
+type Ident = String -- ^ info to distinguish different identifiers
 
 data Expr =
       Null
@@ -59,22 +62,26 @@ data Expr =
     | Var Ident
     | App Expr Expr
     | Lam Ident Expr
-    | If Expr Expr Expr
+    -- | If Expr Expr Expr
     | Case Expr [(Pattern, Expr)]
     | Let Ident Expr Expr
     | Assume Expr Expr
     | Assert Expr Expr
     deriving (Eq)
 
-data Pattern =
-      ConstNullPat
-    | ConstNumberPat Double
-    | ConstTextPat String
-    | ConstBooleanPat Bool
-    | ListPat [Pattern]
-    | DictPat [(String, Pattern)]
-    | VarPat Ident
-    deriving (Eq)
+type Pattern = Expr -- ^ Pattern is an Expr with only data constructors and vars
+
+-- | check if an Expr is a valid Pattern
+isPattern :: Expr -> Bool
+isPattern expr = case expr of
+    Null -> True
+    Number _ -> True
+    Text _ -> True
+    Boolean _ -> True
+    List xs -> all isPattern xs
+    Dict ps -> all isPattern (map snd ps)
+    Var _ -> True
+    _ -> False
 
 -- ** show instances
 
@@ -96,23 +103,8 @@ instance ShowLiteral Expr where
         where
             showKey k = if True then k else show k --TODO: escape
 
-instance ShowLiteral Pattern where
-    genLitWith showPart expr = case expr of
-        ConstNullPat -> (0, "null")
-        ConstNumberPat x -> (0, show x) --TODO
-        ConstTextPat s -> (0, show s) --TODO
-        ConstBooleanPat b -> (0, if b then "true" else "false")
-        ListPat xs -> (0, "[" ++ intercalate "," [showPart 1 x | x <- xs] ++ "]")
-        DictPat mp -> (0, "{" ++ intercalate "," [showKey k ++ ":" ++ showPart 1 v | (k, v) <- mp] ++ "}")
-        VarPat id -> (0, id)
-        where
-            showKey k = if True then k else show k --TODO: escape
-
 instance Show Expr where
     show expr = "Expr `" ++ (showLit maxBound expr) ++ "`"
-
-instance Show Pattern where
-    show pat = "Pattern `" ++ (showLit maxBound pat) ++ "`"
 
 -------------------------------------------------------------------------------------------
 -- * EvalResult
