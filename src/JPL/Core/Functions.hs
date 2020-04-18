@@ -108,13 +108,8 @@ evalProc env expr = case expr of
         Just e' -> evalProc env e'
         Nothing -> yield (LogicalError "variable not found")
     App ef ea -> App <$> evalProc env ef <*> evalProc env ea
-    Lam id e -> yield (Success (Lam id e))
+    Lam pat e -> yield (Success (Lam pat e))
     Let k v e -> evalProc (M.insert k v env) e
-    Case e cs -> do
-        v <- evalProc env e
-        case listToMaybe [(exp, fromJust mat) | (pat, exp) <- cs, let mat = matchPattern pat v, isJust mat] of
-            Nothing -> yield $ LogicalError "no pattern matched"
-            Just (e', extraEnv) -> evalProc (M.union env (M.fromList extraEnv)) e'
     Assume ep e -> do
         p <- evalProc env ep
         case p of

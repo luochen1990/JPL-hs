@@ -22,19 +22,33 @@ type Parser = ParsecT Void String Identity
 parseExpr :: String -> Either String Expr
 parseExpr s = either (Left . errorBundlePretty) Right (runParser (pExpr <* space <* eof) "input" s)
 
+{-
+syntax examples:
+
+term1 := x? y? x + y
+term2 := x? y? add x y
+term3 := x? y? x @add y
+term4 := x? y? r := x + y; r
+term5 := x? x @(null? 0 | "one"? 1 | _? 2)
+-}
+
 pExpr :: Parser Expr
-pExpr = pLam
+pExpr = pAlt
+
+pAlt :: Parser Expr
+pAlt = space *> (
+        Alt <$> try (pLam <* tok '|' <* space) <*> pAlt
+    <|> pLam
+    ) <?> "pAlt"
 
 pLam :: Parser Expr
 pLam = space *> (
-        Lam <$> try (pIdent <* tok '?' <* space) <*> pLam
-    <|> pCase
+        Lam <$> try (pPattern <* tok '?' <* space) <*> pLam
+    <|> pSeq
     ) <?> "pLam"
 
-pCase :: Parser Expr
-pCase = Case <$> (toks "case" *> pApp <* toks "of") <*> some ((,) <$> (pPattern <* tok ':') <*> pApp)
-    <|> pSeq
-    <?> "pCase"
+pPattern :: Parser Pattern
+pPattern = pAtom
 
 pSeq :: Parser Expr
 pSeq = space *> (
@@ -81,16 +95,13 @@ pLitBoolean :: Parser Bool
 pLitBoolean = toks "true" $> True <|> toks "false" $> False
     <?> "pLitBoolean"
 
-pPattern :: Parser Pattern
-pPattern = undefined
-
 -- ** parser utils
 
 spaceChar :: Parser Char
-spaceChar = (char ' ' <|> tab) <?> "space/tab"
+spaceChar = (char ' ' <|> tab) <?> "spaceChar"
 
 space :: Parser ()
-space = () <$ many spaceChar <?> "spaces/tabs"
+space = () <$ many spaceChar <?> "spaces"
 
 tok :: Char -> Parser Char
 tok c = try (space *> char c)

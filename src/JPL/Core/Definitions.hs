@@ -57,13 +57,10 @@ data Expr =
     | Boolean Bool
     | List [Expr]
     | Dict [(String, Expr)]
-    -- | Lookup Expr Ident
-    -- | Index Expr Expr
     | Var Ident
     | App Expr Expr
-    | Lam Ident Expr
-    -- | If Expr Expr Expr
-    | Case Expr [(Pattern, Expr)]
+    | Lam Pattern Expr
+    | Alt Expr Expr -- `f | g` combine two partial function into a new one
     | Let Ident Expr Expr
     | Assume Expr Expr
     | Assert Expr Expr
@@ -98,8 +95,8 @@ instance ShowLiteral Expr where
         Let k v e -> (2, k ++ " := " ++ showPart 1 v ++ "; " ++ showPart 2 e)
         Assume p e -> (2, "assume " ++ showPart 1 p ++ "; " ++ showPart 2 e)
         Assert p e -> (2, "assert " ++ showPart 1 p ++ "; " ++ showPart 2 e)
-        Case ex ps -> (3, "case " ++ showPart 1 ex ++ " of " ++ intercalate ", " [showPart 1 p ++ ": " ++ showPart 1 e | (p, e) <- ps])
-        Lam id e -> (4, id ++ "? " ++ showPart 4 e)
+        Lam pat e -> (3, showPart 0 pat ++ "? " ++ showPart 3 e)
+        Alt ef eg -> (4, showPart 3 ef ++ " | " ++ showPart 4 eg)
         where
             showKey k = if True then k else show k --TODO: escape
 

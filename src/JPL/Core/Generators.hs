@@ -8,6 +8,7 @@ module JPL.Core.Generators where
 import qualified Data.Map as M
 import Data.List
 import Data.Maybe
+import Control.Monad
 import Test.QuickCheck
 import JPL.Core.Definitions
 import JPL.Core.Functions
@@ -22,12 +23,16 @@ arbIdent = elements ["x", "y", "z", "u", "v", "w"]
 arbFnName :: Gen String
 arbFnName = elements ["f", "g", "h"]
 
-arbNat :: Gen Int
-arbNat = elements [0, 1, 2]
+arbNat :: Int -> Gen Int
+arbNat n = resize n arbitrarySizedNatural
 
-arbDivide :: Int -> Gen (Int, Int)
-arbDivide 0 = pure (0, 0)
-arbDivide n = (getNonNegative <$> arbitrary) >>= (\m -> let x = m `mod` n in pure (x, n - x))
+divide :: Int -> Int -> Gen [Int]
+divide m _ | m < 1 = complain "`m` should >= 1"
+divide m 0 = pure (replicate m 0)
+divide 1 n = pure [n]
+divide 2 n = arbNat n >>= \x -> pure [x, n - x]
+divide m n = repM (m-1) (\(x : xs) -> (xs ++) <$> (divide 2 x)) [] where
+  repM n f = foldr (>=>) pure (replicate n f)
 
 arbNatSized :: Int -> Gen Int
 arbNatSized n = resize n arbitrarySizedNatural
@@ -41,6 +46,9 @@ arbMap n k v = [zip ks vs | ks <- arbSet n k, vs <- vectorOf (length ks) v]
 shrinkSnd :: Arbitrary b => (a, b) -> [(a, b)]
 shrinkSnd (x, y) = [(x, y') | y' <- shrink y]
 
+arbPattern :: Gen Expr
+arbPattern = arbitrary `suchThat` isPattern
+
 instance Arbitrary Expr where
   arbitrary = sized tree' where
     tree' 0 = oneof [
@@ -51,14 +59,14 @@ instance Arbitrary Expr where
       Var <$> arbIdent]
     tree' n | n > 0 = oneof [
       tree' 0,
-      List <$> (arbNat >>= \m -> vectorOf m (tree' ((n-1) `div` m))),
-      Dict <$> (arbNat >>= \m -> arbMap m arbKey (tree' ((n-1) `div` m))),
-      (arbDivide (n-1) >>= \(m1, m2) -> App <$> tree' m1 <*> tree' m2),
-      (arbDivide (n-1) >>= \(m1, m2) -> Let <$> arbIdent <*> tree' m1 <*> tree' m2),
-      (arbDivide (n-1) >>= \(m1, m2) -> Assume <$> tree' m1 <*> tree' m2),
-      (arbDivide (n-1) >>= \(m1, m2) -> Assert <$> tree' m1 <*> tree' m2),
-      -- TODO: Case
-      Lam <$> arbIdent <*> tree' (n-1)]
+      List <$> (arbNat 3 >>= \m -> vectorOf m (tree' ((n-1) `div` m))),
+      Dict <$> (arbNat 3 >>= \m -> arbMap m arbKey (tree' ((n-1) `div` m))),
+      (divide 2 (n-1) >>= \[n1, n2] -> App <$> tree' n1 <*> tree' n2),
+      (divide 2 (n-1) >>= \[n1, n2] -> Let <$> arbIdent <*> tree' n1 <*> tree' n2),
+      (divide 2 (n-1) >>= \[n1, n2] -> Assume <$> tree' n1 <*> tree' n2),
+      (divide 2 (n-1) >>= \[n1, n2] -> Assert <$> tree' n1 <*> tree' n2),
+      (divide 2 (n-1) >>= \[n1, n2] -> Lam <$> resize n1 arbPattern <*> tree' n2),
+      (divide 2 (n-1) >>= \[n1, n2] -> Alt <$> tree' n1 <*> tree' n2)]
   shrink d = case d of
     Number x -> Null : [Number 1 | x /= 1]
     Text s -> Null : [Text "a" | s /= "a"]
@@ -70,8 +78,8 @@ instance Arbitrary Expr where
     Let k v e -> v : e : [Let k v' e' | v' <- shrink v, e' <- shrink e]
     Assume ep ex -> ep : ex : [Assume ep' ex' | ep' <- shrink ep, ex' <- shrink ex]
     Assert ep ex -> ep : ex : [Assert ep' ex' | ep' <- shrink ep, ex' <- shrink ex]
-    -- TODO: Case
-    Lam id e -> e : [Lam id e' | e' <- shrink e]
+    Lam pat e -> pat : e : [Lam pat' e' | pat' <- shrink pat, e' <- shrink e]
+    Alt ef eg -> ef : eg : [Alt ef' eg' | ef' <- shrink ef, eg' <- shrink eg]
     _ -> [Null]
 
 instance CoArbitrary Expr where
@@ -87,6 +95,6 @@ instance CoArbitrary Expr where
     Let k v e -> variant 8 . coarbitrary (k, v, e)
     Assume p e -> variant 9 . coarbitrary (p, e)
     Assert p e -> variant 10 . coarbitrary (p, e)
-    --TODO: Case ex ps -> variant 11 . coarbitrary (ex, ps)
-    Lam id e -> variant 12 . coarbitrary (id, e)
+    Lam pat e -> variant 12 . coarbitrary (pat, e)
+    Alt ef eg -> variant 13 . coarbitrary (ef, eg)
 
