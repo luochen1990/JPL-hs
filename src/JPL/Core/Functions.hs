@@ -32,18 +32,18 @@ import JPL.Core.Definitions
 
 -- ** matchPattern
 
-matchPattern :: Pattern -> Expr -> Maybe [(Ident, Expr)]
-matchPattern pat expr = match pat expr [] where
-    match :: Pattern -> Expr -> [(Ident, Expr)] -> Maybe [(Ident, Expr)]
-    match pat expr bindings = case (pat, expr) of
-        (Null, Null) -> Just bindings
-        (Number x, Number x') -> if x == x' then Just bindings else Nothing
-        (Text s, Text s') -> if s == s' then Just bindings else Nothing
-        (Boolean b, Boolean b') -> if b == b' then Just bindings else Nothing
-        (List xs, List xs') -> if length xs == length xs' then concat <$> sequence [match pat v [] | (pat, v) <- zip xs xs'] else Nothing
-        (Dict mp, Dict mp') -> concat <$> sequence [if isJust mv then match pat (fromJust mv) [] else Nothing | (k, pat) <- mp, let mv = lookup k mp']
-        (Var id, _) -> if id == "_" then Just bindings else Just ((id, expr) : bindings) --NOTE: _ is an special identifier
-        _ -> complain "given `pat` is not a valid Pattern"
+--matchPattern :: Pattern -> Expr -> Maybe [(Ident, Expr)]
+--matchPattern pat expr = match pat expr [] where
+--    match :: Pattern -> Expr -> [(Ident, Expr)] -> Maybe [(Ident, Expr)]
+--    match pat expr bindings = case (pat, expr) of
+--        (Null, Null) -> Just bindings
+--        (Number x, Number x') -> if x == x' then Just bindings else Nothing
+--        (Text s, Text s') -> if s == s' then Just bindings else Nothing
+--        (Boolean b, Boolean b') -> if b == b' then Just bindings else Nothing
+--        (List xs, List xs') -> if length xs == length xs' then concat <$> sequence [match pat v [] | (pat, v) <- zip xs xs'] else Nothing
+--        (Dict mp, Dict mp') -> concat <$> sequence [if isJust mv then match pat (fromJust mv) [] else Nothing | (k, pat) <- mp, let mv = lookup k mp']
+--        (Var id, _) -> if id == "_" then Just bindings else Just ((id, expr) : bindings) --NOTE: _ is an special identifier
+--        _ -> complain "given `pat` is not a valid Pattern"
 
 -- ** FuelT
 
@@ -83,82 +83,100 @@ instance MonadTrans FuelT where
         MaybeT $ return (Just (a, s-1))
     {-# INLINE lift #-}
 
--- ** EvalM
+getFuelLevel :: (Monad m) => FuelT m Int
+getFuelLevel = FuelT $ \s -> pure (s, s)
 
--- | EvalM is the monad for eval procedure
-type EvalM a = FuelT (StateT () EvalResult) a
+-- ** Eval
 
-data Expr' = MkExpr' (ExprF Expr') | NativeFn (Expr -> EvalM Expr)
+-- | Eval is the monad for eval procedure
+type Eval a = FuelT (StateT () EvalResult) a
 
-type Env = Map Ident Expr'
+type Env a = Map Ident a
 
-yield :: EvalResult a -> EvalM a
+type EvalEnv = Env (Either NativeFn Expr)
+
+data NativeFn = NativeFn {
+    nativeFnName :: String,
+    runNativeFn :: (EvalEnv -> Expr -> Eval Expr)
+}
+
+yield :: EvalResult a -> Eval a
 yield r = FuelT (\n -> MaybeT (StateT $ \ ~() -> fmap (\a -> (Just (a, n), ())) r))
 
-runEvalM :: EvalM a -> Int -> EvalResult a
-runEvalM proc fuel = case runStateT (runMaybeT (runFuelT proc fuel)) () of
-    (Success (mr, s)) -> case mr of Nothing -> OutOfFuel; Just (r, fuelLeft) -> Success r
+runEval :: Eval a -> Int -> (EvalResult a, Int)
+runEval proc fuel = case runStateT (runMaybeT (runFuelT proc fuel)) () of
+    Success (mr, s) -> case mr of
+        Nothing -> (OutOfFuel, 0)
+        Just (r, fuelLeft) -> Success (r, fuelLeft)
     err -> fmap impossible err
+
+-- ** matchM
+
+matchM :: EvalEnv -> Pattern -> Expr -> Eval [(Ident, Expr)]
+matchM env pat expr = matM pat expr [] where
+    matM pat expr bindings = do
+        expr' <- evalM env expr
+        case (pat, expr') of
+            (Null, Null) -> yield (Success bindings)
+            (Number x, Number x') -> if x == x' then yield (Success bindings) else yield (LogicalError "not match")
+            (Text s, Text s') -> if s == s' then yield (Success bindings) else yield (LogicalError "not match")
+            (Boolean b, Boolean b') -> if b == b' then yield (Success bindings) else yield (LogicalError "not match")
+            (List xs, List xs') -> if length xs == length xs' then concat <$> sequence [matM pat v [] | (pat, v) <- zip xs xs'] else yield (LogicalError "not match")
+            (Dict mp, Dict mp') -> concat <$> sequence [if isJust mv then matM pat (fromJust mv) [] else yield (LogicalError "not match") | (k, pat) <- mp, let mv = lookup k mp']
+            (Var id, _) -> if id == "_" then yield (Success bindings) else yield (Success ((id, expr) : bindings)) --NOTE: _ is an special identifier
+            _ -> complain "given `pat` is not a valid Pattern"
 
 -- ** evalM
 
-evalM :: Env -> Expr -> EvalM Expr
-evalM env expr = do
-    r <- evalM' env expr
-    case r of
-        MkExpr' e -> yield (Success (toExpr r))
-        NativeFn fn -> yield (LogicalError "got native fn as final result")
-
-toExpr :: Expr' -> Expr
-toExpr = undefined
-
-toExpr' :: Expr -> Expr'
-toExpr' = undefined
-
-evalM' :: Env -> Expr -> EvalM Expr'
-evalM' env expr = case expr of
-    Null -> yield (Success (MkExpr' NullF))
-    Number x -> yield (Success (MkExpr' (NumberF x)))
-    Text s -> yield (Success (MkExpr' (TextF s)))
-    Boolean b -> yield (Success (MkExpr' (BooleanF b)))
-    List es -> (MkExpr' . ListF) <$> sequence [(evalM' env e) | e <- es]
-    Dict mp -> (MkExpr' . DictF) <$> sequence [(k,) <$> (evalM' env e) | (k, e) <- mp]
+evalM :: EvalEnv -> Expr -> Eval Expr
+evalM _ expr | isWHNF expr = yield (Success expr)
+evalM env expr = case expr of
+    Let k v e -> evalM (M.insert k (Right v) env) e
     Var id -> case (M.lookup id env) of
-        Just e' -> yield (Success e')
-        Nothing -> yield (LogicalError "variable not found")
+        Just ee -> case ee of
+            Left fn -> yield (Success (Native id))
+            Right e -> evalM env e
+        Nothing -> yield (LogicalError ("variable `" ++ id ++ "` not found"))
     App ef ex -> do
-        f <- evalM' env ef
+        f <- evalM env ef
         case f of
-            (MkExpr' (LamF pat e)) -> do
-                x <- evalM env ex
-                case matchPattern (toExpr pat) x of
-                    Nothing -> yield (LogicalError "pattern not match")
-                    Just extraEnv -> evalM' (M.union env (M.fromList (map (second toExpr') extraEnv))) (toExpr e)
-            --(MkExpr' (AltF eg eh)) -> 
-            --(NativeFn fn) -> do
-            --    x <- evalM' env ex
-            --    case x of
-    Lam pat e -> yield (Success (MkExpr' (LamF (toExpr' pat) (toExpr' e))))
-    Let k v e -> evalM' (M.insert k (toExpr' v) env) e
-    Assume ep e -> do
-        p <- evalM' env ep
-        case p of
-            (MkExpr' (BooleanF True)) -> evalM' env e
-            (MkExpr' (BooleanF False)) -> yield $ ImproperCall
-            _ -> yield $ LogicalError "assume cond must be Boolean"
-    Assert ep e -> do
-        p <- evalM' env ep
-        case p of
-            (MkExpr' (BooleanF True)) -> evalM' env e
-            (MkExpr' (BooleanF False)) -> yield $ LogicalError "assertion failed"
-            _ -> yield $ LogicalError "assert cond must be Boolean"
+            (Lam pat e) -> do
+                extraEnv <- matchM env pat ex
+                let env' = M.union env (M.fromList (map (second Right) extraEnv))
+                evalM env' e
+            (Alt eg eh) -> do
+                fuel <- getFuelLevel
+                let (res1, fuelLeft) = runEval (evalM env (App eg ex)) fuel
+                case res1 of
+                    Success r -> r
+                    ImproperCall -> evalM env (App eh ex)
+                    err -> yield err
+            (Native fname) -> do
+                case M.lookup fname env of
+                    Just ee -> case ee of
+                        Left fn -> runNativeFn fn env ex
+                        Right e -> impossible
+                    Nothing -> impossible
+            _ -> yield (LogicalError ("not a function: " ++ show f))
+    --Assume ep e -> do
+    --    p <- evalM env ep
+    --    case p of
+    --        (Boolean True) -> evalM env e
+    --        (Boolean False) -> yield $ ImproperCall
+    --        _ -> yield $ LogicalError "assume cond must be Boolean"
+    --Assert ep e -> do
+    --    p <- evalM env ep
+    --    case p of
+    --        (Boolean True) -> evalM env e
+    --        (Boolean False) -> yield $ LogicalError "assertion failed"
+    --        _ -> yield $ LogicalError "assert cond must be Boolean"
 
 -- ** eval
 
-eval :: Int -> Env -> Expr -> EvalResult Expr
-eval fuel env expr = runEvalM (evalM env expr) fuel
+eval :: Int -> EvalEnv -> Expr -> EvalResult Expr
+eval fuel env expr = fmap fst (runEval (evalM env expr) fuel)
 
-eval' :: Env -> Expr -> EvalResult Expr
+eval' :: EvalEnv -> Expr -> EvalResult Expr
 eval' = eval 100000
 
 eval'' :: Expr -> EvalResult Expr

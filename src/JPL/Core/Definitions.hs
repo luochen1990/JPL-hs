@@ -69,6 +69,7 @@ data Expr =
     | Let Ident Expr Expr
     | Assume Expr Expr
     | Assert Expr Expr
+    | Native Ident -- native 1-ary function, this case is WHNF (which is different from Var)
     deriving (Eq)
 
 type Pattern = Expr -- ^ Pattern is an Expr with only data constructors and vars
@@ -82,6 +83,9 @@ isWHNF expr = case expr of
     Boolean _ -> True
     List _ -> True
     Dict _ -> True
+    Native _ -> True
+    Lam _ _ -> True
+    Alt _ _ -> True
     _ -> False
 
 -- | check if an Expr is a valid Pattern
@@ -106,6 +110,7 @@ instance ShowLiteral Expr where
         Boolean b -> (0, if b then "true" else "false")
         List xs -> (0, "[" ++ intercalate ", " [showPart 1 x | x <- xs] ++ "]")
         Dict mp -> (0, "{" ++ intercalate ", " [showKey k ++ ": " ++ showPart 1 v | (k, v) <- mp] ++ "}")
+        Native fname -> (0, '#':fname)
         Var id -> (0, id)
         App ef ex -> (1, showPart 1 ef ++ " " ++ showPart 0 ex)
         Let k v e -> (2, k ++ " := " ++ showPart 1 v ++ "; " ++ showPart 2 e)
