@@ -17,6 +17,7 @@ import Control.Monad.State (State, StateT(..), runStateT)
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
+import Data.Functor.Identity
 import Data.Semigroup
 import Data.Foldable (fold, foldMap)
 import Data.List
@@ -31,91 +32,105 @@ import JPL.Core.Definitions
 -- * eval
 --------------------------------------------------------------------------------
 
--- ** matchPattern
+-- ** EvalResult
 
---matchPattern :: Pattern -> Expr -> Maybe [(Ident, Expr)]
---matchPattern pat expr = match pat expr [] where
---    match :: Pattern -> Expr -> [(Ident, Expr)] -> Maybe [(Ident, Expr)]
---    match pat expr bindings = case (pat, expr) of
---        (Null, Null) -> Just bindings
---        (Number x, Number x') -> if x == x' then Just bindings else Nothing
---        (Text s, Text s') -> if s == s' then Just bindings else Nothing
---        (Boolean b, Boolean b') -> if b == b' then Just bindings else Nothing
---        (List xs, List xs') -> if length xs == length xs' then concat <$> sequence [match pat v [] | (pat, v) <- zip xs xs'] else Nothing
---        (Dict mp, Dict mp') -> concat <$> sequence [if isJust mv then match pat (fromJust mv) [] else Nothing | (k, pat) <- mp, let mv = lookup k mp']
---        (Var id, _) -> if id == "_" then Just bindings else Just ((id, expr) : bindings) --NOTE: _ is an special identifier
---        _ -> complain "given `pat` is not a valid Pattern"
-
--- ** FuelT
-
---newtype FuelT m a = FuelT { runFuelT :: Int -> (MaybeT m a, Int) }
---
---instance (Monad m) => Functor (FuelT m) where
---    fmap f m = FuelT $ \ s ->
---        if s > 0 then fmap f &&& (flip (-) 1) $ runFuelT m s else (empty, s)
---    {-# INLINE fmap #-}
---
---instance (Monad m) => Applicative (FuelT m) where
---    pure a = FuelT $ \s -> if s > 0 then (return a, s-1) else (empty, s)
---    {-# INLINE pure #-}
---
---    FuelT mf <*> FuelT mx = FuelT $ \ s -> if s > 0 then let (f, s') = mf (s-1) in do
---        guard (s > 0)
---        ~(f, s') <- mf (s-1)
---        guard (s' > 0)
---        ~(x, s'') <- mx (s'-1)
---        return (f x, s'')
---    {-# INLINE (<*>) #-}
---
---    m *> k = m >>= \_ -> k
---    {-# INLINE (*>) #-}
---
---instance (Monad m) => Monad (FuelT m) where
---    m >>= k  = FuelT $ \ s -> do
---        guard (s > 0)
---        ~(a, s') <- runFuelT m (s-1)
---        runFuelT (k a) s'
---    {-# INLINE (>>=) #-}
---
---instance MonadTrans FuelT where
---    lift m = FuelT $ \s -> do
---        guard (s > 0)
---        a <- lift m
---        MaybeT $ return (Just (a, s-1))
---    {-# INLINE lift #-}
-
---getFuelLevel :: (Monad m) => FuelT m Int
---getFuelLevel = FuelT $ \s -> pure (s, s)
-
--- ** FuelT
-
---newtype FuelT m a = m (MaybeT (StateT Int)) a
-
--- ** Eval
-
-data FailReason = OutOfFuel | ImproperCall | LogicalError String
+data FailReason = OutOfFuel | ImproperCall | LogicalError String deriving (Show, Eq, Ord)
 
 type EvalResult a = Either FailReason a
 
-newtype Eval a = Eval (ExceptT FailReason (StateT () (MaybeT (StateT Int IO))) a)
+-- ** FuelT
+
+newtype FuelT m a = FuelT { runFuelT :: Int -> Maybe (m a, Int) }
+
+instance (Monad m) => Functor (FuelT m) where
+    fmap f m = FuelT $ \ s -> do
+        guard (s > 0)
+        (m', s') <- runFuelT m (s-1)
+        pure (f <$> m', s')
+    {-# INLINE fmap #-}
+
+instance (Monad m) => Applicative (FuelT m) where
+    pure a = FuelT $ \ s -> do
+        guard (s > 0)
+        pure (pure a, s-1)
+    {-# INLINE pure #-}
+
+    FuelT mf <*> FuelT mx = FuelT $ \ s -> do
+        guard (s > 0)
+        ~(f, s') <- mf (s-1)
+        guard (s' > 0)
+        ~(x, s'') <- mx (s'-1)
+        return (f <*> x, s'')
+    {-# INLINE (<*>) #-}
+
+    m *> k = m >>= \_ -> k
+    {-# INLINE (*>) #-}
+
+instance (Monad m) => Monad (FuelT m) where
+    m >>= k = FuelT $ \ s -> do
+        guard (s > 0)
+        ~(m', s') <- runFuelT m (s-1)
+        guard (s' > 0)
+        --Just (_hole, s')
+        Just ((m' >>= \x -> impossible (runFuelT (k x) s')), s')
+    {-# INLINE (>>=) #-}
+
+instance MonadTrans FuelT where
+    lift m = FuelT $ \s -> do
+        guard (s > 0)
+        return (m, s-1)
+    {-# INLINE lift #-}
+
+getFuelLeft :: (Monad m) => FuelT m Int
+getFuelLeft = FuelT $ \s -> pure (pure s, s)
+
+--newtype FuelT m a = FuelT (MaybeT (StateT Int m) a)
+--
+---- s -> m (Maybe a, s)
+--
+---- s -> Maybe (m a, s)
+--
+--instance (Monad m) => Functor (FuelT m) where
+--    fmap f (FuelT m) = FuelT (fmap f m)
+--
+--instance (Monad m) => Applicative (FuelT m) where
+--    pure x = FuelT (pure x)
+--    (FuelT mf) <*> (FuelT mx) = FuelT (mf <*> mx)
+--
+--instance (Monad m) => Monad (FuelT m) where
+--    return = pure
+--    (FuelT (MaybeT (StateT g))) >>= f = FuelT (MaybeT (StateT h)) where
+--        h s = do
+--            case (s > 0) of
+--                False -> pure (Nothing, 0)
+--                True -> do
+--                    (ma, s') <- g (s-1)
+--                    case (s' > 0) of
+--                        False -> pure (Nothing, 0)
+--            --when (s' <= 0) _h2
+--            case ma of
+--                Nothing -> undefined
+--                Just a -> case f a of (FuelT (MaybeT (StateT u))) -> u (s'-1)
+
+
+-- ** Eval
+
+-- | Eval is the monad for eval procedure
+newtype Eval a = Eval (ExceptT FailReason (StateT () (FuelT Identity)) a)
 
 instance Functor Eval where
-    fmap f (Eval m) = Eval undefined
+    fmap f (Eval m) = Eval (fmap f m)
 
 instance Applicative Eval where
-    pure = undefined
-    mf <*> mx = undefined
+    pure x = Eval (pure x)
+    (Eval mf) <*> (Eval mx) = Eval (mf <*> mx)
 
 instance Monad Eval where
     return = pure
-    m >>= f = undefined
+    (Eval m) >>= f = Eval (m >>= \x -> case f x of (Eval y) -> y)
 
 getFuelLevel :: Eval Int
-getFuelLevel = undefined
---getFuelLevel = FuelT $ \s -> pure (s, s)
-
----- | Eval is the monad for eval procedure
---type Eval a = FuelT (StateT () EvalResult) a
+getFuelLevel = Eval (lift (lift getFuelLeft))
 
 type Env = Map Ident (Either NativeFn Expr)
 
@@ -124,11 +139,8 @@ data NativeFn = NativeFn {
     runNativeFn :: (Env -> Expr -> Eval Expr)
 }
 
---yield :: EvalResult a -> Eval a
---yield r = FuelT (\n -> MaybeT (StateT $ \ ~() -> fmap (\a -> (Just (a, n), ())) r))
-
 yield :: EvalResult a -> Eval a
-yield r = undefined
+yield r = Eval (except r)
 
 yieldSucc :: a -> Eval a
 yieldSucc x = yield (Right x)
@@ -137,7 +149,10 @@ yieldFail :: FailReason -> Eval a
 yieldFail err = yield (Left err)
 
 runEval :: Eval a -> Int -> (EvalResult a, Int)
-runEval = undefined
+runEval (Eval ev) fuel = case runFuelT (runStateT (runExceptT ev) ()) fuel of
+    Nothing -> (Left OutOfFuel, 0)
+    Just (m, fuelLeft) -> (fst (runIdentity m), fuelLeft)
+
 --runEval proc fuel = case runStateT (runMaybeT (runFuelT proc fuel)) () of
 --    Right (mr, s) -> case mr of
 --        Nothing -> (OutOfFuel, 0)
@@ -210,12 +225,13 @@ evalM env expr = case expr of
 -- ** eval
 
 eval :: Int -> Env -> Expr -> EvalResult Expr
-eval = undefined
---eval fuel env expr = fmap fst (runEval (evalM env expr) fuel)
+eval fuel env expr = fst (runEval (evalM env expr) fuel)
 
 eval' :: Env -> Expr -> EvalResult Expr
 eval' = eval 100000
 
 eval'' :: Expr -> EvalResult Expr
 eval'' = eval' M.empty
+
+test = eval'' (App (Lam (Var "x") (Var "x")) (Number 1))
 
