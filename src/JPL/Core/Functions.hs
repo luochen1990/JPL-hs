@@ -40,19 +40,15 @@ type EvalResult a = Either FailReason a
 
 -- ** FuelT
 
-newtype FuelT m a = FuelT { runFuelT :: Int -> Maybe (m a, Int) }
+newtype FuelT m a = FuelT { runFuelT :: Int -> MaybeT m (a, Int) }
 
 instance (Monad m) => Functor (FuelT m) where
-    fmap f m = FuelT $ \ s -> do
-        guard (s > 0)
-        (m', s') <- runFuelT m (s-1)
-        pure (f <$> m', s')
+    fmap f m = FuelT $ \ s ->
+        if s > 0 then fmap (\ ~(a, s') -> (f a, s'-1)) $ runFuelT m s else empty
     {-# INLINE fmap #-}
 
 instance (Monad m) => Applicative (FuelT m) where
-    pure a = FuelT $ \ s -> do
-        guard (s > 0)
-        pure (pure a, s-1)
+    pure a = FuelT $ \ s -> if s > 0 then return (a, s-1) else empty
     {-# INLINE pure #-}
 
     FuelT mf <*> FuelT mx = FuelT $ \ s -> do
@@ -60,58 +56,28 @@ instance (Monad m) => Applicative (FuelT m) where
         ~(f, s') <- mf (s-1)
         guard (s' > 0)
         ~(x, s'') <- mx (s'-1)
-        return (f <*> x, s'')
+        return (f x, s'')
     {-# INLINE (<*>) #-}
 
     m *> k = m >>= \_ -> k
     {-# INLINE (*>) #-}
 
 instance (Monad m) => Monad (FuelT m) where
-    m >>= k = FuelT $ \ s -> do
+    m >>= k  = FuelT $ \ s -> do
         guard (s > 0)
-        ~(m', s') <- runFuelT m (s-1)
-        guard (s' > 0)
-        --Just (_hole, s')
-        Just ((m' >>= \x -> impossible (runFuelT (k x) s')), s')
+        ~(a, s') <- runFuelT m (s-1)
+        runFuelT (k a) s'
     {-# INLINE (>>=) #-}
 
 instance MonadTrans FuelT where
     lift m = FuelT $ \s -> do
         guard (s > 0)
-        return (m, s-1)
+        a <- lift m
+        MaybeT $ return (Just (a, s-1))
     {-# INLINE lift #-}
 
 getFuelLeft :: (Monad m) => FuelT m Int
-getFuelLeft = FuelT $ \s -> pure (pure s, s)
-
---newtype FuelT m a = FuelT (MaybeT (StateT Int m) a)
---
----- s -> m (Maybe a, s)
---
----- s -> Maybe (m a, s)
---
---instance (Monad m) => Functor (FuelT m) where
---    fmap f (FuelT m) = FuelT (fmap f m)
---
---instance (Monad m) => Applicative (FuelT m) where
---    pure x = FuelT (pure x)
---    (FuelT mf) <*> (FuelT mx) = FuelT (mf <*> mx)
---
---instance (Monad m) => Monad (FuelT m) where
---    return = pure
---    (FuelT (MaybeT (StateT g))) >>= f = FuelT (MaybeT (StateT h)) where
---        h s = do
---            case (s > 0) of
---                False -> pure (Nothing, 0)
---                True -> do
---                    (ma, s') <- g (s-1)
---                    case (s' > 0) of
---                        False -> pure (Nothing, 0)
---            --when (s' <= 0) _h2
---            case ma of
---                Nothing -> undefined
---                Just a -> case f a of (FuelT (MaybeT (StateT u))) -> u (s'-1)
-
+getFuelLeft = FuelT $ \s -> pure (s, s)
 
 -- ** Eval
 
@@ -148,16 +114,13 @@ yieldSucc x = yield (Right x)
 yieldFail :: FailReason -> Eval a
 yieldFail err = yield (Left err)
 
-runEval :: Eval a -> Int -> (EvalResult a, Int)
-runEval (Eval ev) fuel = case runFuelT (runStateT (runExceptT ev) ()) fuel of
-    Nothing -> (Left OutOfFuel, 0)
-    Just (m, fuelLeft) -> (fst (runIdentity m), fuelLeft)
+runFuel :: FuelT Identity a -> Int -> Maybe (a, Int)
+runFuel m fuel = runIdentity (runMaybeT (runFuelT m fuel))
 
---runEval proc fuel = case runStateT (runMaybeT (runFuelT proc fuel)) () of
---    Right (mr, s) -> case mr of
---        Nothing -> (OutOfFuel, 0)
---        Just (r, fuelLeft) -> Right (r, fuelLeft)
---    err -> fmap impossible err
+runEval :: Eval a -> Int -> (EvalResult a, Int)
+runEval (Eval ev) fuel = case runFuel (runStateT (runExceptT ev) ()) fuel of
+    Nothing -> (Left OutOfFuel, 0)
+    Just ((a, s), fuelLeft) -> (a, fuelLeft)
 
 -- ** matchM
 
@@ -167,18 +130,17 @@ matchM env pat expr = matM pat expr [] where
         expr' <- evalM env expr
         case (pat, expr') of
             (Null, Null) -> (yieldSucc bindings)
-            (Number x, Number x') -> if x == x' then (yieldSucc bindings) else yieldFail (LogicalError "not match")
-            (Text s, Text s') -> if s == s' then (yieldSucc bindings) else yieldFail (LogicalError "not match")
-            (Boolean b, Boolean b') -> if b == b' then (yieldSucc bindings) else yieldFail (LogicalError "not match")
-            (List xs, List xs') -> if length xs == length xs' then concat <$> sequence [matM pat v [] | (pat, v) <- zip xs xs'] else yieldFail (LogicalError "not match")
-            (Dict mp, Dict mp') -> concat <$> sequence [if isJust mv then matM pat (fromJust mv) [] else yieldFail (LogicalError "not match") | (k, pat) <- mp, let mv = lookup k mp']
+            (Number x, Number x') -> if x == x' then (yieldSucc bindings) else yieldFail ImproperCall
+            (Text s, Text s') -> if s == s' then (yieldSucc bindings) else yieldFail ImproperCall
+            (Boolean b, Boolean b') -> if b == b' then (yieldSucc bindings) else yieldFail ImproperCall
+            (List xs, List xs') -> if length xs == length xs' then concat <$> sequence [matM pat v [] | (pat, v) <- zip xs xs'] else yieldFail ImproperCall
+            (Dict mp, Dict mp') -> concat <$> sequence [if isJust mv then matM pat (fromJust mv) [] else yieldFail ImproperCall | (k, pat) <- mp, let mv = lookup k mp']
             (Var id, _) -> if id == "_" then (yieldSucc bindings) else (yieldSucc ((id, expr) : bindings)) --NOTE: _ is an special identifier
             _ -> complain "given `pat` is not a valid Pattern"
 
 -- ** evalM
 
 evalM :: Env -> Expr -> Eval Expr
---evalM = undefined
 evalM _ expr | isWHNF expr = (yieldSucc expr)
 evalM env expr = case expr of
     Let k v e -> evalM (M.insert k (Right v) env) e
@@ -195,13 +157,11 @@ evalM env expr = case expr of
                 let env' = M.union env (M.fromList (map (second Right) extraEnv))
                 evalM env' e
             (Alt eg eh) -> do
-                fuel <- getFuelLevel
-                let (res1, fuelLeft) = runEval (evalM env (App eg ex)) fuel
-                case res1 of
-                    Right r -> yieldSucc r
-                    Left failReason -> case failReason of
-                        ImproperCall -> evalM env (App eh ex)
-                        _ -> yieldFail failReason
+                case evalM env (App eg ex) of
+                    (Eval ev) -> Eval $ catchE ev $ \err ->
+                        case err of
+                            ImproperCall -> case (evalM env (App eh ex)) of (Eval ev') -> ev'
+                            _ -> throwE err
             (Native fname) -> do
                 case M.lookup fname env of
                     Just ee -> case ee of
@@ -233,5 +193,6 @@ eval' = eval 100000
 eval'' :: Expr -> EvalResult Expr
 eval'' = eval' M.empty
 
-test = eval'' (App (Lam (Var "x") (Var "x")) (Number 1))
+evalTest :: Expr -> (EvalResult Expr, Int)
+evalTest expr = runEval (evalM M.empty expr) 100
 
