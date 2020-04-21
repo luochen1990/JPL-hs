@@ -110,7 +110,7 @@ instance ShowLiteral Expr where
         Boolean b -> (0, if b then "true" else "false")
         List xs -> (0, "[" ++ intercalate ", " [showPart 1 x | x <- xs] ++ "]")
         Dict mp -> (0, "{" ++ intercalate ", " [showKey k ++ ": " ++ showPart 1 v | (k, v) <- mp] ++ "}")
-        Native fname -> (0, '#':fname)
+        Native fname -> (0, fname)
         Var id -> (0, id)
         App ef ex -> (1, showPart 1 ef ++ " " ++ showPart 0 ex)
         Let k v e -> (2, k ++ " := " ++ showPart 1 v ++ "; " ++ showPart 2 e)

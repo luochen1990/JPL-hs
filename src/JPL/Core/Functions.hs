@@ -1,5 +1,6 @@
 {-# language TupleSections #-}
 {-# language FlexibleInstances #-}
+{-# language LambdaCase #-}
 
 -- | Providing core definitions about JsonSpec
 
@@ -18,8 +19,9 @@ import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Data.Functor.Identity
+import Data.Functor.Foldable (embed, project, cata, para)
 import Data.Semigroup
-import Data.Foldable (fold, foldMap)
+import Data.Foldable (fold, foldMap, toList)
 import Data.List
 import Data.Maybe
 import Data.Fixed (mod')
@@ -27,6 +29,7 @@ import Data.Text.Lazy (unpack)
 import Data.Char (isAlphaNum)
 import Text.Pretty.Simple
 import JPL.Core.Definitions
+import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- * eval
@@ -97,10 +100,10 @@ instance Monad Eval where
 
 type Env = Map Ident (Either NativeFn Expr)
 
-data NativeFn = NativeFn {
-    nativeFnName :: String,
-    runNativeFn :: (Env -> Expr -> Eval Expr)
-}
+data NativeFn = NativeFn { runNativeFn :: (Env -> Expr -> Eval Expr) }
+
+instance Show NativeFn where
+    show _ = "(* Native Function *)"
 
 yield :: EvalResult a -> Eval a
 yield r = Eval (except r)
@@ -148,6 +151,18 @@ matchM pat env expr = matM pat expr where
 
 -- ** evalM
 
+allVars :: Pattern -> [Ident]
+allVars = cata $ \case (VarF id) -> [id]; (ListF xs) -> concat xs; (DictF ps) -> concat (map snd ps); _ -> []
+
+inject :: Ident -> Expr -> Expr -> Expr
+inject k v = para $ \expr -> case expr of
+    VarF k' -> if k' == k then v else embed (fmap snd expr)
+    LamF (pat, _) (e, injected) -> Lam pat (if k `elem` allVars pat then e else injected)
+    _ -> embed (fmap snd expr)
+
+injectAll :: [(Ident, Expr)] -> Expr -> Expr
+injectAll kvs = foldr (.) id [inject k v | (k, v) <- kvs]
+
 evalM :: Env -> Expr -> Eval Expr
 evalM _ expr | isWHNF expr = (yieldSucc expr)
 evalM env expr = case expr of
@@ -162,8 +177,9 @@ evalM env expr = case expr of
         case f of
             (Lam pat e) -> do
                 extraEnv <- matchM pat env ex
-                let env' = M.union env (M.fromList (map (second Right) extraEnv))
-                Eval $ catchE (unpackEval (evalM env' e)) $ \err ->
+                --let env' = M.union env (M.fromList (map (second Right) extraEnv))
+                let e' = injectAll extraEnv e
+                Eval $ catchE (unpackEval (evalM env e')) $ \err ->
                     case err of
                         ImproperCall -> throwE (LogicalError "improper call")
                         _ -> throwE err
