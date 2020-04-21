@@ -95,9 +95,6 @@ instance Monad Eval where
     return = pure
     (Eval m) >>= f = Eval (m >>= \x -> case f x of (Eval y) -> y)
 
-getFuelLevel :: Eval Int
-getFuelLevel = Eval (lift (lift getFuelLeft))
-
 type Env = Map Ident (Either NativeFn Expr)
 
 data NativeFn = NativeFn {
