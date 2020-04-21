@@ -20,12 +20,19 @@ import JPL.Core.Functions
 import JPL.Core.Parser
 import JPL.Core.Generators
 
+-- * test utils
+
 isRight :: Either a b -> Bool
 isRight e = either (const False) (const True) e
 
 (<?>) :: (Testable p) => p -> String -> Property
 (<?>) = flip (Test.QuickCheck.counterexample . ("Extra Info: " ++))
 infixl 2 <?>
+
+(===>) :: String -> String -> Expectation
+expr ===> res  =  eval'' <$> parseExpr expr `shouldBe` Right <$> parseExpr res
+
+-- * tests
 
 main :: IO ()
 main = hspec $ do
@@ -40,4 +47,10 @@ main = hspec $ do
         prop "parseExpr <> show == identity" $
           \(expr :: Expr) ->
             (parseExpr (showLit maxBound expr)) === (Right expr :: Either String Expr)
+      describe "Functions" $ do
+        describe "eval" $ do
+          it "simple cases" $ do
+            "(x? x) 1" ===> "1"
+            "(\"one\"? 1 | \"two\"? 2) \"one\"" ===> "1"
+            "(\"one\"? 1 | \"two\"? 2) \"two\"" ===> "2"
 
