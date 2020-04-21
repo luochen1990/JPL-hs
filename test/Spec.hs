@@ -4,6 +4,7 @@
 {-# language TypeSynonymInstances #-}
 {-# language FlexibleInstances #-}
 
+import Text.RawString.QQ
 import Debug.Trace
 import qualified Data.Map as M
 import Data.List
@@ -29,8 +30,10 @@ isRight e = either (const False) (const True) e
 (<?>) = flip (Test.QuickCheck.counterexample . ("Extra Info: " ++))
 infixl 2 <?>
 
-(===>) :: String -> String -> Expectation
-expr ===> res  =  eval'' <$> parseExpr expr `shouldBe` Right <$> parseExpr res
+(===>) :: String -> Either FailReason String -> Expectation
+expr ===> expect  =  case expect of
+  Left err -> eval'' <$> parseExpr expr `shouldBe` Right (Left err)
+  Right res -> eval'' <$> parseExpr expr `shouldBe` Right <$> parseExpr res
 
 -- * tests
 
@@ -47,10 +50,20 @@ main = hspec $ do
         prop "parseExpr <> show == identity" $
           \(expr :: Expr) ->
             (parseExpr (showLit maxBound expr)) === (Right expr :: Either String Expr)
+
       describe "Functions" $ do
         describe "eval" $ do
-          it "simple cases" $ do
-            "(x? x) 1" ===> "1"
-            "(\"one\"? 1 | \"two\"? 2) \"one\"" ===> "1"
-            "(\"one\"? 1 | \"two\"? 2) \"two\"" ===> "2"
+          it "simple cases (1)" $ do
+            "(x? x) 1" ===> Right "1"
+            "(1? 2) 1" ===> Right "2"
+            "(1? 2) 0" ===> Left ImproperCall
+
+          it "simple cases (2)" $ do
+            "(x? (1? 2) x) 0" ===> Left (LogicalError "improper call")
+
+          it "simple cases (3)" $ do
+            "(null? 0 | \"one\"? 1) null" ===> Right "0"
+            "(null? 0 | \"one\"? 1) \"one\"" ===> Right "1"
+            "(null? 0 | \"one\"? 1) \"two\"" ===> Left ImproperCall
+            "(null? 0 | \"one\"? 1) \"three\"" ===> Left ImproperCall
 

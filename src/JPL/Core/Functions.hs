@@ -121,19 +121,30 @@ runEval (Eval ev) fuel = case runFuel (runStateT (runExceptT ev) ()) fuel of
 
 -- ** matchM
 
-matchM :: Env -> Pattern -> Expr -> Eval [(Ident, Expr)]
-matchM env pat expr = matM pat expr [] where
-    matM pat expr bindings = do
-        expr' <- evalM env expr
-        case (pat, expr') of
-            (Null, Null) -> (yieldSucc bindings)
-            (Number x, Number x') -> if x == x' then (yieldSucc bindings) else yieldFail ImproperCall
-            (Text s, Text s') -> if s == s' then (yieldSucc bindings) else yieldFail ImproperCall
-            (Boolean b, Boolean b') -> if b == b' then (yieldSucc bindings) else yieldFail ImproperCall
-            (List xs, List xs') -> if length xs == length xs' then concat <$> sequence [matM pat v [] | (pat, v) <- zip xs xs'] else yieldFail ImproperCall
-            (Dict mp, Dict mp') -> concat <$> sequence [if isJust mv then matM pat (fromJust mv) [] else yieldFail ImproperCall | (k, pat) <- mp, let mv = lookup k mp']
-            (Var id, _) -> if id == "_" then (yieldSucc bindings) else (yieldSucc ((id, expr) : bindings)) --NOTE: _ is an special identifier
-            _ -> complain "given `pat` is not a valid Pattern"
+matchM :: Pattern -> Env -> Expr -> Eval [(Ident, Expr)]
+matchM pat env expr = matM pat expr where
+    matM pat expr = do
+        e <- evalM env expr
+        case pat of
+            Null -> case e of
+                Null -> (yieldSucc [])
+                _ -> yieldFail ImproperCall
+            Number x -> case e of
+                (Number x') -> if x == x' then (yieldSucc []) else yieldFail ImproperCall --TODO: precise issue about Double?
+                _ -> yieldFail ImproperCall
+            Text s -> case e of
+                (Text s') -> if s == s' then (yieldSucc []) else yieldFail ImproperCall
+                _ -> yieldFail ImproperCall
+            Boolean b -> case e of
+                (Boolean b') -> if b == b' then (yieldSucc []) else yieldFail ImproperCall
+                _ -> yieldFail ImproperCall
+            List xs -> case e of
+                (List xs') -> if length xs == length xs' then concat <$> sequence [matM pat v | (pat, v) <- zip xs xs'] else yieldFail ImproperCall
+                _ -> yieldFail ImproperCall
+            Dict mp -> case e of
+                (Dict mp') -> concat <$> sequence [if isJust mv then matM pat (fromJust mv) else yieldFail ImproperCall | (k, pat) <- mp, let mv = lookup k mp']
+            Var id -> if id == "_" then (yieldSucc []) else (yieldSucc [(id, expr)]) --NOTE: _ is an special identifier
+            _ -> complain ("given `pat` is not a valid Pattern: " ++ show pat)
 
 -- ** evalM
 
@@ -150,9 +161,12 @@ evalM env expr = case expr of
         f <- evalM env ef
         case f of
             (Lam pat e) -> do
-                extraEnv <- matchM env pat ex
+                extraEnv <- matchM pat env ex
                 let env' = M.union env (M.fromList (map (second Right) extraEnv))
-                evalM env' e
+                Eval $ catchE (unpackEval (evalM env' e)) $ \err ->
+                    case err of
+                        ImproperCall -> throwE (LogicalError "improper call")
+                        _ -> throwE err
             (Alt eg eh) -> Eval $ catchE (unpackEval (evalM env (App eg ex))) $ \err ->
                 case err of
                     ImproperCall -> unpackEval (evalM env (App eh ex))
