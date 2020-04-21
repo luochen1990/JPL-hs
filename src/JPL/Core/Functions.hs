@@ -82,7 +82,7 @@ getFuelLeft = FuelT $ \s -> pure (s, s)
 -- ** Eval
 
 -- | Eval is the monad for eval procedure
-newtype Eval a = Eval (ExceptT FailReason (StateT () (FuelT Identity)) a)
+newtype Eval a = Eval {unpackEval :: ExceptT FailReason (StateT () (FuelT Identity)) a}
 
 instance Functor Eval where
     fmap f (Eval m) = Eval (fmap f m)
@@ -93,7 +93,7 @@ instance Applicative Eval where
 
 instance Monad Eval where
     return = pure
-    (Eval m) >>= f = Eval (m >>= \x -> case f x of (Eval y) -> y)
+    (Eval m) >>= f = Eval (m >>= \x -> unpackEval (f x))
 
 type Env = Map Ident (Either NativeFn Expr)
 
@@ -153,12 +153,10 @@ evalM env expr = case expr of
                 extraEnv <- matchM env pat ex
                 let env' = M.union env (M.fromList (map (second Right) extraEnv))
                 evalM env' e
-            (Alt eg eh) -> do
-                case evalM env (App eg ex) of
-                    (Eval ev) -> Eval $ catchE ev $ \err ->
-                        case err of
-                            ImproperCall -> case (evalM env (App eh ex)) of (Eval ev') -> ev'
-                            _ -> throwE err
+            (Alt eg eh) -> Eval $ catchE (unpackEval (evalM env (App eg ex))) $ \err ->
+                case err of
+                    ImproperCall -> unpackEval (evalM env (App eh ex))
+                    _ -> throwE err
             (Native fname) -> do
                 case M.lookup fname env of
                     Just ee -> case ee of
