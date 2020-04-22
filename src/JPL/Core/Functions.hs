@@ -152,7 +152,7 @@ matchM pat env expr = matM pat expr where
 -- ** evalM
 
 allVars :: Pattern -> [Ident]
-allVars = cata $ \case (VarF id) -> [id]; (ListF xs) -> concat xs; (DictF ps) -> concat (map snd ps); _ -> []
+allVars = cata $ \case (VarF id) -> [id]; limb -> concatMap toList limb
 
 inject :: Ident -> Expr -> Expr -> Expr
 inject k v = para $ \expr -> case expr of
