@@ -20,6 +20,7 @@ import JPL.Core.Definitions
 import JPL.Core.Functions
 import JPL.Core.Parser
 import JPL.Core.Generators
+import JPL.Core.Builtins
 
 -- * test utils
 
@@ -32,8 +33,8 @@ infixl 2 <?>
 
 (===>) :: String -> Either FailReason String -> Expectation
 expr ===> expect  =  case expect of
-  Left err -> eval'' <$> parseExpr expr `shouldBe` Right (Left err)
-  Right res -> eval'' <$> parseExpr expr `shouldBe` Right <$> parseExpr res
+  Left err -> eval 10000 builtins <$> parseExpr expr `shouldBe` Right (Left err)
+  Right res -> eval 10000 builtins <$> parseExpr expr `shouldBe` Right <$> parseExpr res
 
 -- * tests
 
@@ -66,4 +67,9 @@ main = hspec $ do
             "(null? 0 | \"one\"? 1) \"one\"" ===> Right "1"
             "(null? 0 | \"one\"? 1) \"two\"" ===> Left ImproperCall
             "(null? 0 | \"one\"? 1) \"three\"" ===> Left ImproperCall
+
+      describe "Builtins" $ do
+        describe "arith" $ do
+          it "add" $ do
+            "add 1 2" ===> Right "3"
 
