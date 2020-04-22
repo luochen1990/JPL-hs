@@ -33,8 +33,8 @@ infixl 2 <?>
 
 (===>) :: String -> Either FailReason String -> Expectation
 expr ===> expect  =  case expect of
-  Left err -> eval 10000 builtins <$> parseExpr expr `shouldBe` Right (Left err)
-  Right res -> eval 10000 builtins <$> parseExpr expr `shouldBe` Right <$> parseExpr res
+  Left err -> eval 1000000 builtins <$> parseExpr expr `shouldBe` Right (Left err)
+  Right res -> eval 1000000 builtins <$> parseExpr expr `shouldBe` Right <$> parseExpr res
 
 -- * tests
 
@@ -68,8 +68,22 @@ main = hspec $ do
             "(null? 0 | \"one\"? 1) \"two\"" ===> Left ImproperCall
             "(null? 0 | \"one\"? 1) \"three\"" ===> Left ImproperCall
 
+          it "sk" $ do
+            "(f? g? x? (f x) (g x)) add (add 1) 1" ===> Right "3"
+            "(x? y? x) 1 2" ===> Right "1"
+
       describe "Builtins" $ do
         describe "arith" $ do
           it "add" $ do
             "add 1 2" ===> Right "3"
+
+          it "raw-fib" $ do
+            --"(f? (x? x x) (x? f (x x))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 0" ===> Right "0"
+            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 0" ===> Right "0"
+            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 1" ===> Right "1"
+            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 2" ===> Right "1"
+            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 3" ===> Right "2"
+            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 4" ===> Right "3"
+            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 5" ===> Right "5"
+            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 6" ===> Right "8"
 

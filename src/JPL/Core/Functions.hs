@@ -173,12 +173,14 @@ evalM env expr = case expr of
             Right e -> evalM env e
         Nothing -> yieldFail (LogicalError ("variable `" ++ id ++ "` not found"))
     App ef ex -> do
+        --traceM $ "expr': " ++ show expr ++ "\n"
         f <- evalM env ef
         case f of
             (Lam pat e) -> do
                 extraEnv <- matchM pat env ex
                 --let env' = M.union env (M.fromList (map (second Right) extraEnv))
                 let e' = injectAll extraEnv e
+                --traceM $ "e': " ++ show e'
                 Eval $ catchE (unpackEval (evalM env e')) $ \err ->
                     case err of
                         ImproperCall -> throwE (LogicalError "improper call")
