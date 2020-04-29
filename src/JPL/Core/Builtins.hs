@@ -32,6 +32,9 @@ nativeFn arity core = Left . NativeFn $ \env arg -> do
 
 builtins :: Env
 builtins = M.fromList [
+
+    -- ** arith
+
     ("add#", nativeFn 2 $ \case [Number x, Number y] -> yieldSucc (Number (x + y)); _ -> yieldFail ImproperCall),
     ("add", term "x? y? add# [y, x]"),
 
@@ -49,6 +52,8 @@ builtins = M.fromList [
 
     ("mod#", nativeFn 2 $ \case [Number x, Number y] -> if y == 0 then yieldFail ImproperCall else yieldSucc (Number (fromIntegral $ floor x `mod` floor y)); _ -> yieldFail ImproperCall),
     ("mod", term "x? y? mod# [y, x]"),
+
+    -- ** compare
 
     ("eq#", nativeFn 2 $ \case
         [Null, Null] -> yieldSucc (Boolean True)
@@ -73,6 +78,19 @@ builtins = M.fromList [
 
     ("ge#", nativeFn 2 $ \case [Number x, Number y] -> yieldSucc (Boolean (x >= y)); _ -> yieldFail ImproperCall),
     ("ge", term "x? y? ge# [y, x]"),
+
+    -- ** logic
+
+    ("and#", nativeFn 2 $ \case [Boolean x, Boolean y] -> yieldSucc (Boolean (x && y)); _ -> yieldFail ImproperCall),
+    ("and", term "x? y? and# [y, x]"),
+
+    ("or#", nativeFn 2 $ \case [Boolean x, Boolean y] -> yieldSucc (Boolean (x || y)); _ -> yieldFail ImproperCall),
+    ("or", term "x? y? or# [y, x]"),
+
+    ("not#", nativeFn 1 $ \case [Boolean x] -> yieldSucc (Boolean (not x)); _ -> yieldFail ImproperCall),
+    ("not", term "x? not# [x]"),
+
+    -- ** control
 
     ("fixpoint", term "f? (x? f (y? (x x) y)) (x? f (y? (x x) y))")]
 
