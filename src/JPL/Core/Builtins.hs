@@ -72,15 +72,7 @@ builtins = M.fromList [
     ("gt", term "x? y? gt# [y, x]"),
 
     ("ge#", nativeFn 2 $ \case [Number x, Number y] -> yieldSucc (Boolean (x >= y)); _ -> yieldFail ImproperCall),
-    ("ge", term "x? y? ge# [y, x]")]
+    ("ge", term "x? y? ge# [y, x]"),
 
-    --("fix#", Left . NativeFn $ \env arg -> do
-    --    arg' <- evalM env arg
-    --    traceM $ "arg': " ++ show arg'
-    --    traceM $ "env: " ++ show (env `M.difference` builtins)
-    --    case arg' of
-    --        (List args) -> if length args == arity then (sequence . map (evalM env) $ args) >>= core else yieldFail ImproperCall
-    --        _ -> yieldFail ImproperCall
-
-    --("fix", term "x? y? mod# [y, x]")]
+    ("fixpoint", term "f? (x? f (y? (x x) y)) (x? f (y? (x x) y))")]
 

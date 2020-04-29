@@ -75,15 +75,17 @@ main = hspec $ do
       describe "Builtins" $ do
         describe "arith" $ do
           it "add" $ do
+            "add 0 0" ===> Right "0"
+            --"add 1 -1" ===> Right "0"
             "add 1 2" ===> Right "3"
+            "add 42 42" ===> Right "84"
 
-          it "raw-fib" $ do
-            --"(f? (x? x x) (x? f (x x))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 0" ===> Right "0"
-            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 0" ===> Right "0"
-            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 1" ===> Right "1"
-            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 2" ===> Right "1"
-            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 3" ===> Right "2"
-            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 4" ===> Right "3"
-            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 5" ===> Right "5"
-            "(f? (x? x x) (x? f (y? (x x) y))) (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 6" ===> Right "8"
+          it "fixpoint" $ do
+            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 0" ===> Right "0"
+            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 1" ===> Right "1"
+            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 2" ===> Right "1"
+            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 3" ===> Right "2"
+            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 4" ===> Right "3"
+            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 5" ===> Right "5"
+            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 6" ===> Right "8"
 
