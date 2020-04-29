@@ -27,11 +27,11 @@ arbNat :: Int -> Gen Int
 arbNat n = resize n arbitrarySizedNatural
 
 divide :: Int -> Int -> Gen [Int]
-divide m _ | m < 1 = complain "`m` should >= 1"
+divide 0 _ = pure []
 divide m 0 = pure (replicate m 0)
 divide 1 n = pure [n]
 divide 2 n = arbNat n >>= \x -> pure [x, n - x]
-divide m n = repM (m-1) (\(x : xs) -> (xs ++) <$> (divide 2 x)) [] where
+divide m n = shuffle =<< repM (m-1) (\(x : xs) -> (xs ++) <$> (divide 2 x)) [n] where
   repM n f = foldr (>=>) pure (replicate n f)
 
 arbNatSized :: Int -> Gen Int
@@ -52,15 +52,15 @@ arbPattern = arbitrary `suchThat` isPattern
 instance Arbitrary Expr where
   arbitrary = sized tree' where
     tree' 0 = oneof [
-      Number <$> elements [0, 1, -1, 42, 3.14],
+      Number <$> elements [0, 1, -1, 42, -42, 3.14, -3.14],
       Text <$> arbKey,
       Boolean <$> arbitrary,
       pure Null,
       Var <$> arbIdent]
     tree' n | n > 0 = oneof [
       tree' 0,
-      List <$> (arbNat 3 >>= \m -> vectorOf m (tree' ((n-1) `div` m))),
-      Dict <$> (arbNat 3 >>= \m -> arbMap m arbKey (tree' ((n-1) `div` m))),
+      List <$> (arbNat 3 >>= \m -> divide m (n-1) >>= \ks -> sequence [tree' k | k <- ks]),
+      Dict <$> (arbNat 3 >>= \m -> divide m (n-1) >>= \ks -> sequence [(,) <$> arbKey <*> tree' k | k <- ks]),
       (divide 2 (n-1) >>= \[n1, n2] -> App <$> tree' n1 <*> tree' n2),
       (divide 2 (n-1) >>= \[n1, n2] -> Let <$> arbIdent <*> tree' n1 <*> tree' n2),
       (divide 2 (n-1) >>= \[n1, n2] -> Assume <$> tree' n1 <*> tree' n2),
