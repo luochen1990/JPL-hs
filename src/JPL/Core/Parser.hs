@@ -11,6 +11,7 @@ import qualified Data.Map as M
 import Data.Char
 import Data.Void
 import Data.Functor
+import Control.Applicative ((<**>))
 import Control.Monad.Identity
 import Control.Monad.State
 import JPL.Core.Definitions
@@ -37,19 +38,15 @@ pExpr :: Parser Expr
 pExpr = pAlt
 
 pAlt :: Parser Expr
-pAlt = space *> (
-        Alt <$> try (pLam <* tok '|' <* space) <*> pAlt
-    <|> pLam
-    ) <?> "pAlt"
+pAlt = space *> (pLam `chainr1` (Alt <$ tok '|' <* space))
+    <?> "pAlt"
 
 pLam :: Parser Expr
-pLam = space *> (
-        Lam <$> try (pPattern <* tok '?' <* space) <*> pLam
-    <|> pSeq
-    ) <?> "pLam"
+pLam = space *> (pSeq `chainr1` (Lam <$ tok '?' <* space))
+    <?> "pLam"
 
-pPattern :: Parser Pattern
-pPattern = pAtom
+--pPattern :: Parser Pattern
+--pPattern = pAtom
 
 pSeq :: Parser Expr
 pSeq = space *> (
@@ -60,7 +57,7 @@ pSeq = space *> (
     ) <?> "pSeq"
 
 pApp :: Parser Expr
-pApp = foldl1 App <$> pAtom `sepBy1` (spaceChar *> space)
+pApp = foldl1 App <$> pAtom `sepBy1'` (spaceChar *> space)
     <?> "pApp"
 
 pAtom :: Parser Expr
@@ -110,9 +107,20 @@ toks :: String -> Parser String
 toks s | isAlphaNum (last s) = try (space *> string s <* notFollowedBy alphaNumChar)
 toks s = try (space *> string s)
 
-sepBy1 :: Parser a -> Parser b -> Parser [a]
-sepBy1 p op = liftM2 (:) p (many (try (op *> p)))
+sepBy1' :: Parser a -> Parser b -> Parser [a]
+sepBy1' p op = liftM2 (:) p (many (try (op *> p)))
 
 sepBy :: Parser a -> Parser b -> Parser [a]
-sepBy p op = liftM2 (:) p (many (try (op *> p))) <|> pure []
+sepBy p op = liftM2 (:) p (many (op *> p)) <|> pure []
+
+chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
+chainl1 p op = p <**> (foldr (flip (.)) id <$> many (flip <$> op <*> p))
+
+chainr1 :: Parser a -> Parser (a -> a -> a) -> Parser a
+chainr1 p op = do
+    p1 <- p
+    mop1 <- optional op
+    case mop1 of
+        Just op1 -> op1 p1 <$> chainr1 p op
+        Nothing -> pure p1
 
