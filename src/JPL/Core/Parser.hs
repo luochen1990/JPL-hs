@@ -5,6 +5,7 @@ module JPL.Core.Parser (
 import Text.Megaparsec hiding (sepBy, sepBy1)
 import Text.Megaparsec.Char hiding (space, space1, spaceChar)
 import qualified Text.Megaparsec.Char.Lexer as L
+import Data.Scientific
 import Control.Monad.Combinators.Expr
 import qualified Data.Map as M
 import Data.Char
@@ -79,8 +80,7 @@ pIdent = (:) <$> letterChar <*> many (alphaNumChar <|> char '_' <|> char '#')
     <?> "pIdent"
 
 pLitNumber :: Parser Double
-pLitNumber = try ((char '-' $> negate <|> pure id) <*> L.float)
-    <|> L.decimal
+pLitNumber = L.signed (pure ()) (toRealFloat <$> L.scientific)
     <?> "pLitNumber"
 
 pLitText :: Parser String

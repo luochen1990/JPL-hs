@@ -30,6 +30,7 @@ dependencies:
 - cereal
 - bytestring
 - megaparsec
+- scientific
 - parser-combinators
 - raw-strings-qq
 - recursion-schemes

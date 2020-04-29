@@ -76,7 +76,7 @@ main = hspec $ do
         describe "arith" $ do
           it "add" $ do
             "add 0 0" ===> Right "0"
-            --"add 1 -1" ===> Right "0"
+            "add 1 -1" ===> Right "0"
             "add 1 2" ===> Right "3"
             "add 42 42" ===> Right "84"
 
