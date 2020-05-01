@@ -33,8 +33,8 @@ infixl 2 <?>
 
 (===>) :: String -> Either FailReason String -> Expectation
 expr ===> expect  =  case expect of
-  Left err -> eval 1000000 builtins <$> parseExpr expr `shouldBe` Right (Left err)
-  Right res -> eval 1000000 builtins <$> parseExpr expr `shouldBe` Right <$> parseExpr res
+  Left err -> eval' 1000000 <$> parseExpr expr `shouldBe` Right (Left err)
+  Right res -> eval' 1000000 <$> parseExpr expr `shouldBe` Right <$> parseExpr res
 
 -- * tests
 

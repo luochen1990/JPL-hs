@@ -66,10 +66,10 @@ data Expr =
     | App Expr Expr
     | Lam Pattern Expr
     | Alt Expr Expr -- `f | g` combine two partial function into a new one
-    | Let Ident Expr Expr
-    | Assume Expr Expr
-    | Assert Expr Expr
-    | Native Ident -- native 1-ary function, this case is WHNF (which is different from Var)
+    | Native Int Int [Expr] -- ary, addr, args; is WHNF if ary > 0 (notice: arity = ary + length args)
+    -- | Let Ident Expr Expr
+    -- | Assume Expr Expr
+    -- | Assert Expr Expr
     deriving (Eq)
 
 type Pattern = Expr -- ^ Pattern is an Expr with only data constructors and vars
@@ -83,9 +83,9 @@ isWHNF expr = case expr of
     Boolean _ -> True
     List _ -> True
     Dict _ -> True
-    Native _ -> True
     Lam _ _ -> True
     Alt _ _ -> True
+    Native ary _ _ -> ary > 0
     _ -> False
 
 -- | check if an Expr is a valid Pattern
@@ -110,14 +110,14 @@ instance ShowLiteral Expr where
         Boolean b -> (0, if b then "true" else "false")
         List xs -> (0, "[" ++ intercalate ", " [showPart 1 x | x <- xs] ++ "]")
         Dict mp -> (0, "{" ++ intercalate ", " [showKey k ++ ": " ++ showPart 1 v | (k, v) <- mp] ++ "}")
-        Native fname -> (0, fname)
         Var id -> (0, id)
         App ef ex -> (1, showPart 1 ef ++ " " ++ showPart 0 ex)
-        Let k v e -> (2, k ++ " := " ++ showPart 1 v ++ "; " ++ showPart 2 e)
-        Assume p e -> (2, "assume " ++ showPart 1 p ++ "; " ++ showPart 2 e)
-        Assert p e -> (2, "assert " ++ showPart 1 p ++ "; " ++ showPart 2 e)
         Lam pat e -> (3, showPart 0 pat ++ "? " ++ showPart 3 e)
         Alt ef eg -> (4, showPart 3 ef ++ " | " ++ showPart 4 eg)
+        Native ary addr args -> (1, "#native-" ++ show addr ++ " " ++ intercalate " " (map (showPart 0) args))
+        -- Let k v e -> (2, "let " ++ k ++ " " ++ showPart 1 v ++ "; " ++ showPart 2 e)
+        -- Assume p e -> (2, "assume " ++ showPart 1 p ++ "; " ++ showPart 2 e)
+        -- Assert p e -> (2, "assert " ++ showPart 1 p ++ "; " ++ showPart 2 e)
         where
             showKey k = if True then k else show k --TODO: escape
 

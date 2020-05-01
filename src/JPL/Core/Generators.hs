@@ -62,9 +62,9 @@ instance Arbitrary Expr where
       List <$> (arbNat 3 >>= \m -> divide m (n-1) >>= \ks -> sequence [tree' k | k <- ks]),
       Dict <$> (arbNat 3 >>= \m -> divide m (n-1) >>= \ks -> sequence [(,) <$> arbKey <*> tree' k | k <- ks]),
       (divide 2 (n-1) >>= \[n1, n2] -> App <$> tree' n1 <*> tree' n2),
-      (divide 2 (n-1) >>= \[n1, n2] -> Let <$> arbIdent <*> tree' n1 <*> tree' n2),
-      (divide 2 (n-1) >>= \[n1, n2] -> Assume <$> tree' n1 <*> tree' n2),
-      (divide 2 (n-1) >>= \[n1, n2] -> Assert <$> tree' n1 <*> tree' n2),
+      -- (divide 2 (n-1) >>= \[n1, n2] -> Let <$> arbIdent <*> tree' n1 <*> tree' n2),
+      -- (divide 2 (n-1) >>= \[n1, n2] -> Assume <$> tree' n1 <*> tree' n2),
+      -- (divide 2 (n-1) >>= \[n1, n2] -> Assert <$> tree' n1 <*> tree' n2),
       (divide 2 (n-1) >>= \[n1, n2] -> Lam <$> resize n1 arbPattern <*> tree' n2),
       (divide 2 (n-1) >>= \[n1, n2] -> Alt <$> tree' n1 <*> tree' n2)]
   shrink d = case d of
@@ -75,9 +75,9 @@ instance Arbitrary Expr where
     List xs -> xs ++ [List xs' | xs' <- shrink xs]
     Dict ps -> map snd ps ++ [Dict ps' | ps' <- shrinkList shrinkSnd ps]
     App ef ex -> ef : ex : [App ef' ex' | ef' <- shrink ef, ex' <- shrink ex]
-    Let k v e -> v : e : [Let k v' e' | v' <- shrink v, e' <- shrink e]
-    Assume ep ex -> ep : ex : [Assume ep' ex' | ep' <- shrink ep, ex' <- shrink ex]
-    Assert ep ex -> ep : ex : [Assert ep' ex' | ep' <- shrink ep, ex' <- shrink ex]
+    -- Let k v e -> v : e : [Let k v' e' | v' <- shrink v, e' <- shrink e]
+    -- Assume ep ex -> ep : ex : [Assume ep' ex' | ep' <- shrink ep, ex' <- shrink ex]
+    -- Assert ep ex -> ep : ex : [Assert ep' ex' | ep' <- shrink ep, ex' <- shrink ex]
     Lam pat e -> pat : e : [Lam pat' e' | pat' <- shrink pat, e' <- shrink e]
     Alt ef eg -> ef : eg : [Alt ef' eg' | ef' <- shrink ef, eg' <- shrink eg]
     _ -> [Null]
@@ -92,9 +92,9 @@ instance CoArbitrary Expr where
     Dict ps -> variant 5 . coarbitrary ps
     Var id -> variant 6 . coarbitrary id
     App ef ex -> variant 7 . coarbitrary (ef, ex)
-    Let k v e -> variant 8 . coarbitrary (k, v, e)
-    Assume p e -> variant 9 . coarbitrary (p, e)
-    Assert p e -> variant 10 . coarbitrary (p, e)
+    -- Let k v e -> variant 8 . coarbitrary (k, v, e)
+    -- Assume p e -> variant 9 . coarbitrary (p, e)
+    -- Assert p e -> variant 10 . coarbitrary (p, e)
     Lam pat e -> variant 12 . coarbitrary (pat, e)
     Alt ef eg -> variant 13 . coarbitrary (ef, eg)
 

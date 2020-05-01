@@ -10,11 +10,14 @@ import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Data.Set as S
 import Data.Set (Set)
+import qualified Data.Array as A
+import Data.Array (Array)
 import Control.Arrow
 import Control.Monad
 import Control.Applicative
-import qualified Control.Monad.State.Class as State
-import Control.Monad.State (State, StateT(..), runStateT)
+-- import qualified Control.Monad.State.Class as State
+-- import Control.Monad.State (State, StateT(..), runStateT)
+import Control.Monad.Trans.RWS.Strict
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
@@ -84,8 +87,21 @@ getFuelLeft = FuelT $ \s -> pure (s, s)
 
 -- ** Eval
 
+data NativeCode = NativeCode {
+    nativeCodeName :: String,
+    nativeArity :: Int,
+    runNative :: ([Expr] -> Eval Expr)
+}
+
+instance Show NativeCode where
+    show (NativeCode name arity body) = "(* native " ++ show arity ++ "-ary: " ++ name ++ "  *)"
+
+type NativePool = Array Int NativeCode
+
+type Env = Map Ident Expr
+
 -- | Eval is the monad for eval procedure
-newtype Eval a = Eval {unpackEval :: ExceptT FailReason (StateT () (FuelT Identity)) a}
+newtype Eval a = Eval {unpackEval :: ExceptT FailReason (RWST NativePool () Env (FuelT Identity)) a}
 
 instance Functor Eval where
     fmap f (Eval m) = Eval (fmap f m)
@@ -98,12 +114,30 @@ instance Monad Eval where
     return = pure
     (Eval m) >>= f = Eval (m >>= \x -> unpackEval (f x))
 
-type Env = Map Ident (Either NativeFn Expr)
+getNativePool :: Eval NativePool
+getNativePool = Eval (lift ask)
 
-data NativeFn = NativeFn { runNativeFn :: (Env -> Expr -> Eval Expr) }
+getEnv :: Eval Env
+getEnv = Eval (lift get)
 
-instance Show NativeFn where
-    show _ = "(* Native Function *)"
+setEnv :: Env -> Eval ()
+setEnv env = Eval (lift (put env))
+
+withExtraEnv :: Ident -> Expr -> Eval a -> Eval a
+withExtraEnv k v ev = do
+    env <- getEnv
+    setEnv (M.insert k v env)
+    r <- ev
+    setEnv env
+    return r
+
+withExtraEnvs :: [(Ident, Expr)] -> Eval a -> Eval a
+withExtraEnvs extras ev = do
+    env <- getEnv
+    setEnv (foldr (uncurry M.insert) env extras)
+    r <- ev
+    setEnv env
+    return r
 
 yield :: EvalResult a -> Eval a
 yield r = Eval (except r)
@@ -117,17 +151,17 @@ yieldFail err = yield (Left err)
 runFuel :: FuelT Identity a -> Int -> Maybe (a, Int)
 runFuel m fuel = runIdentity (runMaybeT (runFuelT m fuel))
 
-runEval :: Eval a -> Int -> (EvalResult a, Int)
-runEval (Eval ev) fuel = case runFuel (runStateT (runExceptT ev) ()) fuel of
-    Nothing -> (Left OutOfFuel, 0)
-    Just ((a, s), fuelLeft) -> (a, fuelLeft)
+runEval :: Eval a -> NativePool -> Env -> Int -> (EvalResult a, (Int, Maybe (Env, ())))
+runEval (Eval ev) nativePool env fuel = case runFuel (runRWST (runExceptT ev) nativePool env) fuel of
+    Nothing -> (Left OutOfFuel, (0, Nothing))
+    Just ((a,s,w), fuelLeft) -> (a, (fuelLeft, Just (s, w)))
 
 -- ** matchM
 
-matchM :: Pattern -> Env -> Expr -> Eval [(Ident, Expr)]
-matchM pat env expr = matM pat expr where
+matchM :: Pattern -> Expr -> Eval [(Ident, Expr)]
+matchM pat expr = matM pat expr where
     matM pat expr = do
-        e <- evalM env expr
+        e <- evalM expr
         case pat of
             Null -> case e of
                 Null -> (yieldSucc [])
@@ -163,63 +197,59 @@ inject k v = para $ \expr -> case expr of
 injectAll :: [(Ident, Expr)] -> Expr -> Expr
 injectAll kvs = foldr (.) id [inject k v | (k, v) <- kvs]
 
-evalM :: Env -> Expr -> Eval Expr
-evalM _ expr | isWHNF expr = (yieldSucc expr)
-evalM env expr = case expr of
-    Let k v e -> evalM (M.insert k (Right v) env) e
-    Var id -> case (M.lookup id env) of
-        Just ee -> case ee of
-            Left fn -> (yieldSucc (Native id))
-            Right e -> evalM env e
-        Nothing -> yieldFail (LogicalError ("variable `" ++ id ++ "` not found"))
+evalM :: Expr -> Eval Expr
+evalM expr | isWHNF expr = (yieldSucc expr)
+evalM expr = case expr of
+    Var id -> do
+        env <- getEnv
+        case (M.lookup id env) of
+            Just e -> evalM e
+            Nothing -> yieldFail (LogicalError ("variable `" ++ id ++ "` not found"))
     App ef ex -> do
         --traceM $ "expr': " ++ show expr ++ "\n"
-        f <- evalM env ef
+        f <- evalM ef
         case f of
             (Lam pat e) -> do
-                extraEnv <- matchM pat env ex
+                extraEnv <- matchM pat ex
                 --let env' = M.union env (M.fromList (map (second Right) extraEnv))
                 let e' = injectAll extraEnv e
                 --traceM $ "e': " ++ show e'
-                Eval $ catchE (unpackEval (evalM env e')) $ \err ->
+                Eval $ catchE (unpackEval (evalM e')) $ \err ->
                     case err of
                         ImproperCall -> throwE (LogicalError "improper call")
                         _ -> throwE err
-            (Alt eg eh) -> Eval $ catchE (unpackEval (evalM env (App eg ex))) $ \err ->
+            (Alt eg eh) -> Eval $ catchE (unpackEval (evalM (App eg ex))) $ \err ->
                 case err of
-                    ImproperCall -> unpackEval (evalM env (App eh ex))
+                    ImproperCall -> unpackEval (evalM (App eh ex))
                     _ -> throwE err
-            (Native fname) -> do
-                case M.lookup fname env of
-                    Just ee -> case ee of
-                        Left fn -> runNativeFn fn env ex
-                        Right e -> impossible
-                    Nothing -> impossible
+            (Native ary addr args) -> evalM (Native (ary - 1) addr (ex : args))
+                --case M.lookup fname env of
+                --    Just ee -> case ee of
+                --        Left fn -> runNative fn env ex
+                --        Right e -> impossible
+                --    Nothing -> impossible
             _ -> yieldFail (LogicalError ("not a function: " ++ show f))
-    --Assume ep e -> do
-    --    p <- evalM env ep
-    --    case p of
-    --        (Boolean True) -> evalM env e
-    --        (Boolean False) -> yield $ ImproperCall
-    --        _ -> yield $ Left $ LogicalError "assume cond must be Boolean"
-    --Assert ep e -> do
-    --    p <- evalM env ep
-    --    case p of
-    --        (Boolean True) -> evalM env e
-    --        (Boolean False) -> yield $ Left $ LogicalError "assertion failed"
-    --        _ -> yield $ Left $ LogicalError "assert cond must be Boolean"
+    Native ary addr args ->
+        if ary == 0 then do
+            nativePool <- getNativePool
+            runNative (nativePool A.! addr) (reverse args)
+        else impossible
+    -- Let k v e -> evalM (M.insert k (Right v) env) e
+    -- Assume ep e -> do
+    --     p <- evalM env ep
+    --     case p of
+    --         (Boolean True) -> evalM env e
+    --         (Boolean False) -> yieldFail ImproperCall
+    --         _ -> yieldFail (LogicalError "assume cond must be Boolean")
+    -- Assert ep e -> do
+    --     p <- evalM env ep
+    --     case p of
+    --         (Boolean True) -> evalM env e
+    --         (Boolean False) -> yieldFail (LogicalError "assertion failed")
+    --         _ -> yieldFail (LogicalError "assert cond must be Boolean")
 
 -- ** eval
 
-eval :: Int -> Env -> Expr -> EvalResult Expr
-eval fuel env expr = fst (runEval (evalM env expr) fuel)
-
-eval' :: Env -> Expr -> EvalResult Expr
-eval' = eval 100000
-
-eval'' :: Expr -> EvalResult Expr
-eval'' = eval' M.empty
-
-evalTest :: Expr -> (EvalResult Expr, Int)
-evalTest expr = runEval (evalM M.empty expr) 100
+eval :: NativePool -> Env -> Int -> Expr -> EvalResult Expr
+eval pool env fuel expr = fst (runEval (evalM expr) pool env fuel)
 

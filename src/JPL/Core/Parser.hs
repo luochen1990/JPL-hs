@@ -1,5 +1,5 @@
 module JPL.Core.Parser (
-    parseExpr
+    parseExpr, parsed
 ) where
 
 import Text.Megaparsec hiding (sepBy, sepBy1)
@@ -24,13 +24,16 @@ type Parser = ParsecT Void String Identity
 parseExpr :: String -> Either String Expr
 parseExpr s = either (Left . errorBundlePretty) Right (runParser (pExpr <* space <* eof) "input" s)
 
+parsed :: String -> Expr
+parsed s = either error id (parseExpr s)
+
 {-
 syntax examples:
 
 term1 := x? y? x + y
 term2 := x? y? add x y
 term3 := x? y? x @add y
-term4 := x? y? r := x + y; r
+term4 := x? y? let r (x @add y); r @add 1
 term5 := x? x @(null? 0 | "one"? 1 | _? 2)
 -}
 
@@ -42,19 +45,31 @@ pAlt = space *> (pLam `chainr1` (Alt <$ tok '|' <* space))
     <?> "pAlt"
 
 pLam :: Parser Expr
-pLam = space *> (pSeq `chainr1` (Lam <$ tok '?' <* space))
+pLam = space *> (pSeq `chainr1` (Lam <$ tok '?' <* space)) --NOTE: expand pPattern to pLam here
     <?> "pLam"
 
---pPattern :: Parser Pattern
---pPattern = pAtom
-
 pSeq :: Parser Expr
-pSeq = space *> (
-        Let <$> try (pIdent <* toks ":=") <*> (pApp <* tok ';') <*> pSeq
-    <|> Assume <$> (toks "assume " *> pApp <* tok ';') <*> pSeq
-    <|> Assert <$> (toks "assert " *> pApp <* tok ';') <*> pSeq
-    <|> pApp
-    ) <?> "pSeq"
+pSeq = space *> (pSuffixApp `chainl1` (App <$ tok ';' <* space))
+    <?> "pSeq"
+
+pSuffixApp :: Parser Expr
+pSuffixApp = space *> (pBin `chainl1` (flip App <$ tok '@' <* space))
+    <?> "pSuffixApp"
+
+pBin :: Parser Expr
+pBin = pApp
+    <?> "pBin"
+
+--"+-*/%^&></\:=."
+--
+--binOps = M.fromList [
+--    ("+", "add")
+--    ("-", "sub")
+--    ("*", "mul")
+--    ("/", "div")
+--    ("//", "exactDiv")
+--    ("%", "mod")
+--    ]
 
 pApp :: Parser Expr
 pApp = foldl1 App <$> pAtom `sepBy1'` (spaceChar *> space)
