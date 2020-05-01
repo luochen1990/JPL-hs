@@ -80,12 +80,12 @@ main = hspec $ do
             "add 1 2" ===> Right "3"
             "add 42 42" ===> Right "84"
 
-          it "fixpoint" $ do
-            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 0" ===> Right "0"
-            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 1" ===> Right "1"
-            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 2" ===> Right "1"
-            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 3" ===> Right "2"
-            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 4" ===> Right "3"
-            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 5" ===> Right "5"
-            "fixpoint (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 6" ===> Right "8"
+          it "recur" $ do
+            "recur (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 0" ===> Right "0"
+            "recur (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 1" ===> Right "1"
+            "recur (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 2" ===> Right "1"
+            "recur (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 3" ===> Right "2"
+            "recur (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 4" ===> Right "3"
+            "recur (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 5" ===> Right "5"
+            "recur (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 6" ===> Right "8"
 

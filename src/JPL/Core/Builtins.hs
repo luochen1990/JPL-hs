@@ -143,7 +143,7 @@ builtinConfigs = [
             (Boolean False) -> evalM y
             _ -> yieldFail (LogicalError "if predication must be Boolean")
     ),
-    term "fixpoint" "f? (x? f (y? (x x) y)) (x? f (y? (x x) y))"]
+    term "recur" "f? (x? f (y? (x x) y)) (x? f (y? (x x) y))"]
 
     
 
