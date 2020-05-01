@@ -66,6 +66,14 @@ builtinConfigs = [
             _ -> yieldFail (LogicalError "assert predication must be Boolean")
     ),
 
+    -- ** type judge
+
+    nativeFn "isBoolean" 1 (\case [Boolean _] -> yieldSucc (Boolean True); _ -> yieldSucc (Boolean False)),
+    nativeFn "isNumber" 1 (\case [Number _] -> yieldSucc (Boolean True); _ -> yieldSucc (Boolean False)),
+    nativeFn "isText" 1 (\case [Text _] -> yieldSucc (Boolean True); _ -> yieldSucc (Boolean False)),
+    nativeFn "isList" 1 (\case [List _] -> yieldSucc (Boolean True); _ -> yieldSucc (Boolean False)),
+    nativeFn "isDict" 1 (\case [Dict _] -> yieldSucc (Boolean True); _ -> yieldSucc (Boolean False)),
+
     -- ** arith
 
     nativeFn "add" 2 (\case [Number y, Number x] -> yieldSucc (Number (x + y)); _ -> yieldFail ImproperCall),
@@ -75,6 +83,8 @@ builtinConfigs = [
     nativeFn "div" 2 (\case [Number y, Number x] -> if y == 0 then yieldFail ImproperCall else yieldSucc (Number (x / y)); _ -> yieldFail ImproperCall),
     nativeFn "mod" 2 (\case [Number y, Number x] -> if y == 0 then yieldFail ImproperCall else yieldSucc (Number (x + y)); _ -> yieldFail ImproperCall),
     nativeFn "exactDiv" 2 (\case [Number y, Number x] -> if y == 0 then yieldFail ImproperCall else yieldSucc (Number (x + y)); _ -> yieldFail ImproperCall),
+    nativeFn "negate" 1 (\case [Number x] -> yieldSucc (Number (negate x)); _ -> yieldFail ImproperCall),
+    nativeFn "abs" 1 (\case [Number x] -> yieldSucc (Number (abs x)); _ -> yieldFail ImproperCall),
 
     -- ** compare
 
@@ -87,7 +97,7 @@ builtinConfigs = [
         --[Dict ps, Dict qs] -> error ("TODO")
         _ -> yieldFail ImproperCall),
 
-    term "neq" "x? y? not (eq# [y, x])",
+    term "neq" "y? x? not (eq y x)",
 
     nativeFn "lt" 2 (\case [Number y, Number x] -> yieldSucc (Boolean (x < y)); _ -> yieldFail ImproperCall),
     nativeFn "le" 2 (\case [Number y, Number x] -> yieldSucc (Boolean (x <= y)); _ -> yieldFail ImproperCall),
@@ -100,13 +110,29 @@ builtinConfigs = [
     nativeFn "or" 2 (\case [Boolean y, Boolean x] -> yieldSucc (Boolean (x || y)); _ -> yieldFail ImproperCall),
     nativeFn "not" 1 (\case [Boolean x] -> yieldSucc (Boolean (not x)); _ -> yieldFail ImproperCall),
 
-    -- ** type judge
+    -- ** text
 
-    nativeFn "isBoolean" 1 (\case [Boolean _] -> yieldSucc (Boolean True); _ -> yieldSucc (Boolean False)),
-    nativeFn "isNumber" 1 (\case [Number _] -> yieldSucc (Boolean True); _ -> yieldSucc (Boolean False)),
-    nativeFn "isText" 1 (\case [Text _] -> yieldSucc (Boolean True); _ -> yieldSucc (Boolean False)),
-    nativeFn "isList" 1 (\case [List _] -> yieldSucc (Boolean True); _ -> yieldSucc (Boolean False)),
-    nativeFn "isDict" 1 (\case [Dict _] -> yieldSucc (Boolean True); _ -> yieldSucc (Boolean False)),
+    nativeFn "prefix" 2 (\case [Number n, Text s] -> yieldSucc (Text (take (floor n) s)); _ -> yieldFail ImproperCall),
+    nativeFn "suffix" 2 (\case [Number n, Text s] -> yieldSucc (Text (drop (floor n) s)); _ -> yieldFail ImproperCall),
+    nativeFn "strcat" 2 (\case [Text y, Text x] -> yieldSucc (Text (x ++ y)); _ -> yieldFail ImproperCall),
+
+    -- ** list
+
+    nativeFn "cons" 2 (\case [x, List xs] -> yieldSucc (List (x:xs)); _ -> yieldFail ImproperCall),
+    nativeFn "head" 1 (\case [List (x:xs)] -> yieldSucc x; _ -> yieldFail ImproperCall),
+    nativeFn "tail" 1 (\case [List (x:xs)] -> yieldSucc (List xs); _ -> yieldFail ImproperCall),
+    nativeFn "last" 1 (\case [List xs] -> yieldSucc (last xs); _ -> yieldFail ImproperCall), --TODO: optmize or use more fuel
+    nativeFn "index" 2 (\case [Number i, List xs] -> maybe (yieldFail ImproperCall) yieldSucc (listToMaybe (drop (floor i) xs)); _ -> yieldFail ImproperCall), --TODO: optmize or use more fuel
+    nativeFn "length" 1 (\case [List xs] -> yieldSucc (Number (fromIntegral (length xs))); _ -> yieldFail ImproperCall), --TODO: optmize or use more fuel
+
+    nativeFn "take" 2 (\case [Number n, List xs] -> yieldSucc (List (take (floor n) xs)); _ -> yieldFail ImproperCall), --TODO: use more fuel
+    nativeFn "drop" 2 (\case [Number n, List xs] -> yieldSucc (List (drop (floor n) xs)); _ -> yieldFail ImproperCall), --TODO: use more fuel
+    nativeFn "concat" 2 (\case [List ys, List xs] -> yieldSucc (List (xs ++ ys)); _ -> yieldFail ImproperCall),
+
+    -- ** dict
+
+    nativeFn "insert" 3 (\case [Text k, v, Dict mp] -> yieldSucc (Dict ((k, v) : mp)); _ -> yieldFail ImproperCall),
+    nativeFn "lookup" 2 (\case [Text k, Dict mp] -> maybe (yieldFail ImproperCall) yieldSucc (lookup k mp); _ -> yieldFail ImproperCall), --TODO: optmize or use more fuel
 
     -- ** control
 
