@@ -42,7 +42,7 @@ complain msg = error ("complain: " ++ msg)
 --------------------------------------------------------------------------------
 
 class ShowLiteral a where
-    -- | genLitWith showPart expr = (dispersity, str)
+    -- | usage: (dispersity, str) = genLitWith showPart expr
     genLitWith :: (forall a'. ShowLiteral a' => Int -> a' -> String) -> a -> (Int, String)
 
     showLit :: Int -> a -> String
@@ -62,14 +62,11 @@ data Expr =
     | Boolean Bool
     | List [Expr]
     | Dict [(String, Expr)]
-    | Var Ident
-    | App Expr Expr
-    | Lam Pattern Expr
+    | Var Ident -- `x`
+    | App Expr Expr -- `f x`
+    | Lam Pattern Expr -- `x? x`
     | Alt Expr Expr -- `f | g` combine two partial function into a new one
     | Native Int Int [Expr] -- ary, addr, args; is WHNF if ary > 0 (notice: arity = ary + length args)
-    -- | Let Ident Expr Expr
-    -- | Assume Expr Expr
-    -- | Assert Expr Expr
     deriving (Eq)
 
 type Pattern = Expr -- ^ Pattern is an Expr with only data constructors and vars
@@ -115,11 +112,8 @@ instance ShowLiteral Expr where
         Lam pat e -> (3, showPart 0 pat ++ "? " ++ showPart 3 e)
         Alt ef eg -> (4, showPart 3 ef ++ " | " ++ showPart 4 eg)
         Native ary addr args -> (1, "#native-" ++ show addr ++ " " ++ intercalate " " (map (showPart 0) args))
-        -- Let k v e -> (2, "let " ++ k ++ " " ++ showPart 1 v ++ "; " ++ showPart 2 e)
-        -- Assume p e -> (2, "assume " ++ showPart 1 p ++ "; " ++ showPart 2 e)
-        -- Assert p e -> (2, "assert " ++ showPart 1 p ++ "; " ++ showPart 2 e)
         where
-            showKey k = if True then k else show k --TODO: escape
+            showKey k = if True then k else show k --TODO: isSimple k
 
 instance Show Expr where
     show expr = "Expr `" ++ (showLit maxBound expr) ++ "`"

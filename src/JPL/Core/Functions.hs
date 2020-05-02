@@ -15,8 +15,6 @@ import Data.Array (Array)
 import Control.Arrow
 import Control.Monad
 import Control.Applicative
--- import qualified Control.Monad.State.Class as State
--- import Control.Monad.State (State, StateT(..), runStateT)
 import Control.Monad.Trans.RWS.Strict
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
@@ -211,7 +209,6 @@ evalM expr = case expr of
         case f of
             (Lam pat e) -> do
                 extraEnv <- matchM pat ex
-                --let env' = M.union env (M.fromList (map (second Right) extraEnv))
                 let e' = injectAll extraEnv e
                 --traceM $ "e': " ++ show e'
                 Eval $ catchE (unpackEval (evalM e')) $ \err ->
@@ -224,30 +221,12 @@ evalM expr = case expr of
                     ImproperCall _ -> unpackEval (evalM (App eh ex))
                     _ -> throwE err
             (Native ary addr args) -> evalM (Native (ary - 1) addr (ex : args))
-                --case M.lookup fname env of
-                --    Just ee -> case ee of
-                --        Left fn -> runNative fn env ex
-                --        Right e -> impossible
-                --    Nothing -> impossible
             _ -> yieldFail (LogicalError ("not a function: `" ++ (showLit maxBound f) ++ "`"))
     Native ary addr args ->
         if ary == 0 then do
             nativePool <- getNativePool
             runNative (nativePool A.! addr) (reverse args)
         else impossible
-    -- Let k v e -> evalM (M.insert k (Right v) env) e
-    -- Assume ep e -> do
-    --     p <- evalM env ep
-    --     case p of
-    --         (Boolean True) -> evalM env e
-    --         (Boolean False) -> yieldFail ImproperCall
-    --         _ -> yieldFail (LogicalError "assume cond must be Boolean")
-    -- Assert ep e -> do
-    --     p <- evalM env ep
-    --     case p of
-    --         (Boolean True) -> evalM env e
-    --         (Boolean False) -> yieldFail (LogicalError "assertion failed")
-    --         _ -> yieldFail (LogicalError "assert cond must be Boolean")
 
 -- ** eval
 

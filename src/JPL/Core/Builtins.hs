@@ -33,7 +33,7 @@ macro name arity core = (name, Left (NativeCode name arity body)) where
 nativeFn :: Ident -> Int -> ([Expr] -> Eval Expr) -> (Ident, Either NativeCode Expr)
 nativeFn name arity core = (name, Left (NativeCode name arity body)) where
     body = \args -> do
-        --traceM $ "arg': " ++ show arg'
+        --traceM $ "args: " ++ show args
         --traceM $ "env: " ++ show (env `M.difference` builtins)
         if length args == arity then (sequence . map evalM $ args) >>= core else yieldFail (ImproperCall ("native function `" ++ name ++ "` expect " ++ show arity ++ " arguments, but got " ++ show (length args)))
 
@@ -46,17 +46,12 @@ builtinConfigs = [
 
     macro "let" 3 (\[pat, v, e] -> do
         evalM (App (Lam pat e) v)
-        --extraEnv <- matchM pat v
-        --withExtraEnvs extraEnv (evalM e)
     ),
 
     macro "assume" 2 (\[pred, e] -> do
         p <- evalM pred
         case p of
-            (Boolean True) -> evalM e -- Eval $ catchE (unpackEval (evalM e)) $ \err ->
-                --case err of
-                --    ImproperCall -> throwE (LogicalError $ "improper call: `" ++ (showLit maxBound e) ++ "`")
-                --    _ -> throwE err
+            (Boolean True) -> evalM e
             (Boolean False) -> yieldFail (Complain $ "assumption `" ++ showLit maxBound pred ++ "` failed")
             _ -> yieldFail (LogicalError "assume predication must be Boolean")
     ),
@@ -148,7 +143,6 @@ builtinConfigs = [
     ),
     term "recur" "f? (x? f (y? (x x) y)) (x? f (y? (x x) y))"]
 
-    
 
 -- * natives & builtins
 
