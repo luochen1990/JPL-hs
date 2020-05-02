@@ -88,7 +88,7 @@ pAtom = space *> (
     ) <?> "pAtom"
 
 pIdent :: Parser Ident
-pIdent = (:) <$> letterChar <*> many (alphaNumChar <|> char '_' <|> char '#')
+pIdent = (:) <$> (letterChar <|> char '_') <*> many (alphaNumChar <|> char '_')
     <?> "pIdent"
 
 pLitNumber :: Parser Double

@@ -105,7 +105,7 @@ isPattern expr = case expr of
 instance ShowLiteral Expr where
     genLitWith showPart expr = case expr of
         Null -> (0, "null")
-        Number x -> (0, show x) --TODO: specify format
+        Number x -> (0, if floor x == ceiling x then show (floor x) else show x) --TODO: specify format
         Text s -> (0, show s) --TODO: escape
         Boolean b -> (0, if b then "true" else "false")
         List xs -> (0, "[" ++ intercalate ", " [showPart 1 x | x <- xs] ++ "]")

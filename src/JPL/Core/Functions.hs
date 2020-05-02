@@ -40,7 +40,7 @@ import Debug.Trace
 
 -- ** EvalResult
 
-data FailReason = OutOfFuel | ImproperCall | LogicalError String deriving (Show, Eq, Ord)
+data FailReason = OutOfFuel | Complain String | ImproperCall String | LogicalError String deriving (Show, Eq, Ord)
 
 type EvalResult a = Either FailReason a
 
@@ -165,21 +165,21 @@ matchM pat expr = matM pat expr where
         case pat of
             Null -> case e of
                 Null -> (yieldSucc [])
-                _ -> yieldFail ImproperCall
+                _ -> yieldFail (ImproperCall ("pattern `" ++ showLit maxBound pat ++ "` not match"))
             Number x -> case e of
-                (Number x') -> if x == x' then (yieldSucc []) else yieldFail ImproperCall --TODO: precise issue about Double?
-                _ -> yieldFail ImproperCall
+                (Number x') -> if x == x' then (yieldSucc []) else yieldFail (ImproperCall ("pattern `" ++ showLit maxBound pat ++ "` not match")) --TODO: precise issue about Double?
+                _ -> yieldFail (ImproperCall ("pattern `" ++ showLit maxBound pat ++ "` not match"))
             Text s -> case e of
-                (Text s') -> if s == s' then (yieldSucc []) else yieldFail ImproperCall
-                _ -> yieldFail ImproperCall
+                (Text s') -> if s == s' then (yieldSucc []) else yieldFail (ImproperCall ("pattern `" ++ showLit maxBound pat ++ "` not match"))
+                _ -> yieldFail (ImproperCall ("pattern `" ++ showLit maxBound pat ++ "` not match"))
             Boolean b -> case e of
-                (Boolean b') -> if b == b' then (yieldSucc []) else yieldFail ImproperCall
-                _ -> yieldFail ImproperCall
+                (Boolean b') -> if b == b' then (yieldSucc []) else yieldFail (ImproperCall ("pattern `" ++ showLit maxBound pat ++ "` not match"))
+                _ -> yieldFail (ImproperCall ("pattern `" ++ showLit maxBound pat ++ "` not match"))
             List xs -> case e of
-                (List xs') -> if length xs == length xs' then concat <$> sequence [matM pat v | (pat, v) <- zip xs xs'] else yieldFail ImproperCall
-                _ -> yieldFail ImproperCall
+                (List xs') -> if length xs == length xs' then concat <$> sequence [matM pat v | (pat, v) <- zip xs xs'] else yieldFail (ImproperCall ("pattern `" ++ showLit maxBound pat ++ "` not match"))
+                _ -> yieldFail (ImproperCall ("pattern `" ++ showLit maxBound pat ++ "` not match"))
             Dict mp -> case e of
-                (Dict mp') -> concat <$> sequence [if isJust mv then matM pat (fromJust mv) else yieldFail ImproperCall | (k, pat) <- mp, let mv = lookup k mp']
+                (Dict mp') -> concat <$> sequence [if isJust mv then matM pat (fromJust mv) else yieldFail (ImproperCall ("pattern `" ++ showLit maxBound pat ++ "` not match")) | (k, pat) <- mp, let mv = lookup k mp']
             Var id -> if id == "_" then (yieldSucc []) else (yieldSucc [(id, expr)]) --NOTE: _ is an special identifier
             _ -> complain ("given `pat` is not a valid Pattern: " ++ show pat)
 
@@ -216,11 +216,12 @@ evalM expr = case expr of
                 --traceM $ "e': " ++ show e'
                 Eval $ catchE (unpackEval (evalM e')) $ \err ->
                     case err of
-                        ImproperCall -> throwE (LogicalError "improper call")
+                        Complain msg -> throwE (ImproperCall $ msg)
+                        ImproperCall msg -> throwE (LogicalError $ "improper call: " ++ msg)
                         _ -> throwE err
             (Alt eg eh) -> Eval $ catchE (unpackEval (evalM (App eg ex))) $ \err ->
                 case err of
-                    ImproperCall -> unpackEval (evalM (App eh ex))
+                    ImproperCall _ -> unpackEval (evalM (App eh ex))
                     _ -> throwE err
             (Native ary addr args) -> evalM (Native (ary - 1) addr (ex : args))
                 --case M.lookup fname env of
@@ -228,7 +229,7 @@ evalM expr = case expr of
                 --        Left fn -> runNative fn env ex
                 --        Right e -> impossible
                 --    Nothing -> impossible
-            _ -> yieldFail (LogicalError ("not a function: " ++ show f))
+            _ -> yieldFail (LogicalError ("not a function: `" ++ (showLit maxBound f) ++ "`"))
     Native ary addr args ->
         if ary == 0 then do
             nativePool <- getNativePool
