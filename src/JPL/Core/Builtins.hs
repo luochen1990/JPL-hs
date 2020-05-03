@@ -117,20 +117,20 @@ builtinConfigs = [
     -- ** list
 
     nativeFn "cons" 2 (\case [x, List xs] -> yieldSucc (List (x:xs)); _ -> yieldFail (ImproperCall "expecting list")),
-    nativeFn "head" 1 (\case [List (x:xs)] -> yieldSucc x; _ -> yieldFail (ImproperCall "expecting list")),
-    nativeFn "tail" 1 (\case [List (x:xs)] -> yieldSucc (List xs); _ -> yieldFail (ImproperCall "expecting list")),
-    nativeFn "last" 1 (\case [List xs] -> yieldSucc (last xs); _ -> yieldFail (ImproperCall "expecting list")), --TODO: optmize or use more fuel
-    nativeFn "index" 2 (\case [Number i, List xs] -> maybe (yieldFail (ImproperCall "expecting list")) yieldSucc (listToMaybe (drop (floor i) xs)); _ -> yieldFail (ImproperCall "expecting list")), --TODO: optmize or use more fuel
+    nativeFn "head" 1 (\case [List (x:xs)] -> yieldSucc x; _ -> yieldFail (ImproperCall "expecting non-empty list")),
+    nativeFn "tail" 1 (\case [List (x:xs)] -> yieldSucc (List xs); _ -> yieldFail (ImproperCall "expecting non-empty list")),
+    nativeFn "last" 1 (\case [List (x:xs)] -> yieldSucc (last (x:xs)); _ -> yieldFail (ImproperCall "expecting non-empty list")), --TODO: optmize or use more fuel
+    nativeFn "index" 2 (\case [Number i, List xs] -> maybe (yieldFail (ImproperCall "expecting non-empty list")) yieldSucc (listToMaybe (drop (floor i) xs)); _ -> yieldFail (ImproperCall "expecting list")), --TODO: optmize or use more fuel
     nativeFn "length" 1 (\case [List xs] -> yieldSucc (Number (fromIntegral (length xs))); _ -> yieldFail (ImproperCall "expecting list")), --TODO: optmize or use more fuel
 
-    nativeFn "take" 2 (\case [Number n, List xs] -> yieldSucc (List (take (floor n) xs)); _ -> yieldFail (ImproperCall "expecting list")), --TODO: use more fuel
-    nativeFn "drop" 2 (\case [Number n, List xs] -> yieldSucc (List (drop (floor n) xs)); _ -> yieldFail (ImproperCall "expecting list")), --TODO: use more fuel
+    nativeFn "take" 2 (\case [Number n, List xs] -> yieldSucc (List (take (floor n) xs)); _ -> yieldFail (ImproperCall "expecting number & list")), --TODO: use more fuel
+    nativeFn "drop" 2 (\case [Number n, List xs] -> yieldSucc (List (drop (floor n) xs)); _ -> yieldFail (ImproperCall "expecting number & list")), --TODO: use more fuel
     nativeFn "concat" 2 (\case [List ys, List xs] -> yieldSucc (List (xs ++ ys)); _ -> yieldFail (ImproperCall "expecting list")),
 
     -- ** dict
 
-    nativeFn "insert" 3 (\case [Text k, v, Dict mp] -> yieldSucc (Dict ((k, v) : mp)); _ -> yieldFail (ImproperCall "expecting dict")),
-    nativeFn "lookup" 2 (\case [Text k, Dict mp] -> maybe (yieldFail (ImproperCall "expecting dict")) yieldSucc (lookup k mp); _ -> yieldFail (ImproperCall "expecting dict")), --TODO: optmize or use more fuel
+    nativeFn "insert" 3 (\case [Text k, v, Dict mp] -> yieldSucc (Dict ((k, v) : mp)); _ -> yieldFail (ImproperCall "expecting text & * & dict")),
+    nativeFn "lookup" 2 (\case [Text k, Dict mp] -> maybe (yieldFail (ImproperCall "key not found")) yieldSucc (lookup k mp); _ -> yieldFail (ImproperCall "expecting text & dict")), --TODO: optmize or use more fuel
 
     -- ** control
 
