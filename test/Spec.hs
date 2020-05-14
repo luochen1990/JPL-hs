@@ -56,6 +56,13 @@ main = hspec $ do
   describe "JPL" $ do
     describe "Core" $ do
       describe "Parser" $ do
+        describe "semi-colon" $ do
+          it "seq" $ do
+            parseExpr "cons 1; cons 2; []" `shouldBe` parseExpr "cons 1 (cons 2 [])"
+
+          it "monadic" $ do
+            parseExpr "bind m1; x? do (f x); bind (g x); y? h y" `shouldBe` parseExpr "bind m1 (x? (do (f x) (bind (g x) (y? h y))))"
+
         prop "parseExpr <> show == identity" $
           \(expr :: Expr) ->
             (parseExpr (showLit maxBound expr)) === (Right expr :: Either String Expr)
