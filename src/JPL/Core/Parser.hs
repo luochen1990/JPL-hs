@@ -49,7 +49,7 @@ pLam = space *> (pSeq `chainr1` (Lam <$ tok '?' <* space)) --NOTE: expand pPatte
     <?> "pLam"
 
 pSeq :: Parser Expr
-pSeq = space *> (pSuffixApp `chainl1` (App <$ tok ';' <* space))
+pSeq = space *> (pSuffixApp `chainr1` (App <$ tok ';' <* space))
     <?> "pSeq"
 
 pSuffixApp :: Parser Expr
