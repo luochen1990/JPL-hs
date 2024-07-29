@@ -2,6 +2,7 @@ module JPL.Core.Parser (
     parseExpr, parsed
 ) where
 
+import Prelude
 import Text.Megaparsec hiding (sepBy, sepBy1)
 import Text.Megaparsec.Char hiding (space, space1, spaceChar)
 import qualified Text.Megaparsec.Char.Lexer as L

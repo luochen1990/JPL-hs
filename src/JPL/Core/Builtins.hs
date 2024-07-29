@@ -1,10 +1,6 @@
-{-# language ScopedTypeVariables #-}
-{-# language TupleSections #-}
-{-# language LambdaCase #-}
-{-# language BlockArguments #-}
-
 module JPL.Core.Builtins (natives, builtins, eval') where
 
+import Prelude
 import Debug.Trace
 import qualified Data.Map as M
 import Data.Map (Map)
@@ -159,4 +155,3 @@ builtins :: Env
 
 eval' :: Int -> Expr -> EvalResult Expr
 eval' = eval natives builtins
-

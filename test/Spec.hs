@@ -1,9 +1,4 @@
-{-# language ScopedTypeVariables #-}
-{-# language MonadComprehensions #-}
-{-# language TupleSections #-}
-{-# language TypeSynonymInstances #-}
-{-# language FlexibleInstances #-}
-
+import Prelude
 import Text.RawString.QQ
 import Debug.Trace
 import qualified Data.Map as M
@@ -26,7 +21,7 @@ import JPL.Core.Builtins
 -- * test utils
 
 isRight :: Either a b -> Bool
-isRight e = either (const False) (const True) e
+isRight = either (const False) (const True)
 
 (<?>) :: (Testable p) => p -> String -> Property
 (<?>) = flip (Test.QuickCheck.counterexample . ("Extra Info: " ++))
@@ -65,7 +60,7 @@ main = hspec $ do
 
         prop "parseExpr <> show == identity" $
           \(expr :: Expr) ->
-            (parseExpr (showLit maxBound expr)) === (Right expr :: Either String Expr)
+            parseExpr (showLit maxBound expr) === (Right expr :: Either String Expr)
 
       describe "Functions" $ do
         describe "eval" $ do
@@ -145,4 +140,3 @@ main = hspec $ do
             "recur (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 5" ===> Right "5"
             "recur (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 6" ===> Right "8"
             "recur (fib? n? (true? n | false? add (fib (sub 1 n)) (fib (sub 2 n))) (lt 2 n)) 100" ===> Left OutOfFuel
-

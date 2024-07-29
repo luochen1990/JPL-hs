@@ -1,17 +1,10 @@
-{-# language TupleSections #-}
-{-# language FlexibleInstances #-}
-
-{-# language RankNTypes #-}
-{-# language UndecidableInstances #-}
-
 {-# language TemplateHaskell #-}
-{-# language TypeFamilies #-}
-{-# language StandaloneDeriving, DeriveTraversable #-}
 
 -- | Providing core definitions about JsonSpec
 
 module JPL.Core.Definitions where
 
+import Prelude
 import qualified Data.Map as M
 import Data.Map (Map)
 import qualified Data.Set as S
@@ -93,7 +86,7 @@ isPattern expr = case expr of
     Text _ -> True
     Boolean _ -> True
     List xs -> all isPattern xs
-    Dict ps -> all isPattern (map snd ps)
+    Dict ps -> all (isPattern . snd) ps
     Var _ -> True
     _ -> False
 
@@ -105,18 +98,18 @@ instance ShowLiteral Expr where
         Number x -> (0, if floor x == ceiling x then show (floor x) else show x) --TODO: specify format
         Text s -> (0, show s) --TODO: escape
         Boolean b -> (0, if b then "true" else "false")
-        List xs -> (0, "[" ++ intercalate ", " [showPart 1 x | x <- xs] ++ "]")
-        Dict mp -> (0, "{" ++ intercalate ", " [showKey k ++ ": " ++ showPart 1 v | (k, v) <- mp] ++ "}")
+        List xs -> (0, "[" ++ intercalate ", " [ showPart 1 x | x <- xs] ++ "]")
+        Dict mp -> (0, "{" ++ intercalate ", " [ showKey k ++ ": " ++ showPart 1 v | (k, v) <- mp] ++ "}")
         Var id -> (0, id)
         App ef ex -> (1, showPart 1 ef ++ " " ++ showPart 0 ex)
         Lam pat e -> (3, showPart 0 pat ++ "? " ++ showPart 3 e)
         Alt ef eg -> (4, showPart 3 ef ++ " | " ++ showPart 4 eg)
-        Native ary addr args -> (1, "#native-" ++ show addr ++ " " ++ intercalate " " (map (showPart 0) args))
+        Native ary addr args -> (1, "#native-" ++ show addr ++ " " ++ unwords (map (showPart 0) args))
         where
             showKey k = if True then k else show k --TODO: isSimple k
 
 instance Show Expr where
-    show expr = "Expr `" ++ (showLit maxBound expr) ++ "`"
+    show expr = "Expr `" ++ showLit maxBound expr ++ "`"
 
 -------------------------------------------------------------------------------------------
 -- * ExprF
@@ -124,4 +117,3 @@ instance Show Expr where
 
 -- | data ExprF e
 makeBaseFunctor ''Expr
-
