@@ -113,7 +113,7 @@ spaceChar :: Parser Char
 spaceChar = (char ' ' <|> tab) <?> "spaceChar"
 
 space :: Parser ()
-space = () <$ many spaceChar <?> "spaces"
+space = void (many spaceChar <?> "spaces")
 
 tok :: Char -> Parser Char
 tok c = try (space *> char c)
@@ -123,10 +123,10 @@ toks s | isAlphaNum (last s) = try (space *> string s <* notFollowedBy alphaNumC
 toks s = try (space *> string s)
 
 sepBy1' :: Parser a -> Parser b -> Parser [a]
-sepBy1' p op = liftM2 (:) p (many (try (op *> p)))
+sepBy1' p op = liftA2 (:) p (many (try (op *> p)))
 
 sepBy :: Parser a -> Parser b -> Parser [a]
-sepBy p op = liftM2 (:) p (many (op *> p)) <|> pure []
+sepBy p op = liftA2 (:) p (many (op *> p)) <|> pure []
 
 chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
 chainl1 p op = p <**> (foldr (flip (.)) id <$> many (flip <$> op <*> p))
@@ -138,4 +138,3 @@ chainr1 p op = do
     case mop1 of
         Just op1 -> op1 p1 <$> chainr1 p op
         Nothing -> pure p1
-
