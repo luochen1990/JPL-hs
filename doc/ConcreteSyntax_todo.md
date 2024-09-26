@@ -1,13 +1,13 @@
 TODO
 ----
 
-- 多行文本及变量嵌入
-- primitive 机制支持 (derivation path 等会用到)
-- Sum/Union Type
-- builtins
-- list index/slice syntax
-- 计算字段
-- 自引用 (let rec)
+-[x] 多行文本及变量嵌入
+-[ ] primitive 机制支持 (derivation path 等会用到)
+-[ ] Sum/Union Type
+-[ ] builtins
+-[ ] list index/slice syntax
+-[ ] 计算字段
+-[x] 自引用 (let rec)
 
 开放式讨论问题
 ------------
