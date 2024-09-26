@@ -1,5 +1,5 @@
 {
-  description = "Jix Programming Language";
+  description = "JPL -- JSON Processing Language";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
